@@ -44,7 +44,7 @@ sudo apt-get install libncurses5-dev libncursesw5-dev
 
 ```bash
 # Compilar
-g++ Galaga.cpp Pantalla.cpp Nave.cpp -o Galaga.exe -lncurses
+g++ Galaga.cpp Pantalla.cpp Nave.cpp Enemigo.cpp -o Galaga.exe -lncurses
 
 # Ejecutar
 ./Galaga.exe
@@ -73,4 +73,5 @@ Pantalla de inicio:
  - Marcelo Detlefsen - 24554
  - Julián Divas - 24687
  - Marco Díaz - 24229
+
  - Alejandro Jeréz - 24678
