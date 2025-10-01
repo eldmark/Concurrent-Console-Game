@@ -3,6 +3,10 @@
         "utility": "cpp",
         "vector": "cpp",
         "format": "cpp",
-        "xstring": "cpp"
+        "xstring": "cpp",
+        "deque": "cpp",
+        "string": "cpp",
+        "ratio": "cpp",
+        "atomic": "cpp"
     }
 }

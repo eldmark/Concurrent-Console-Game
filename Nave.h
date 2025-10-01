@@ -15,5 +15,5 @@ public:
     int getX() const;
     int getY() const;
 };
-
 #endif
+

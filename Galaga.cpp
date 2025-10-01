@@ -11,6 +11,7 @@
 #include "Pantalla.h"
 #include "Nave.h"
 #include "Enemigo.h"
+#include <pthread.h>
 
 using namespace std;
 
@@ -136,7 +137,7 @@ void drawControlIcons()
 
     cout << "└──────────────┘"; // Nave del jugador
     setColor(11);
-    
+
     gotoxy(60, 13);
     cout << "┌─────────────┐";
     gotoxy(60, 14);
@@ -145,7 +146,6 @@ void drawControlIcons()
     cout << "│      A      │";
     gotoxy(60, 16);
     cout << "└─────────────┘";
-  
 }
 
 // Ocultar cursor
@@ -202,7 +202,7 @@ void drawFrame()
     cout << "╝";
 }
 
-// Pantalla de inicio
+// ------------PANTALLA DE INICIO Y NOMBRE DE JUGADOR ------------
 void showSplashScreen()
 {
     clearScreen();
@@ -228,17 +228,24 @@ void showSplashScreen()
     getchLinux();
 }
 
+/// Solicitar nombre de jugador
+/// @param isVictory
+/// @return String con el nombre del jugador
 string getPlayerName(bool isVictory = false)
 {
     clearScreen();
     drawFrame();
 
-    if (isVictory) setColor(10);      // Verde brillante para victoria
-    else setColor(14);                // Amarillo para game over / derrota
+    if (isVictory)
+        setColor(10); // Verde brillante para darle brillo a la victoria
+    else
+        setColor(14); // Amarillo para game over dramático
 
     gotoxy(30, 10);
-    if (isVictory) cout << "¡VICTORIA!";
-    else cout << "¡GAME OVER!";
+    if (isVictory)
+        cout << "¡VICTORIA!";
+    else
+        cout << "¡GAME OVER!";
 
     setColor(15);
     gotoxy(25, 12);
@@ -289,7 +296,7 @@ string getPlayerName(bool isVictory = false)
     return name;
 }
 
-// Pantalla de puntajes actualizada
+// --------------------- PANTALLA DE PUNTAJES ----------------
 void showScoresScreen()
 {
     clearScreen();
@@ -340,166 +347,438 @@ void showScoresScreen()
     getchLinux();
 }
 
-// ---------------- GAME LOOP  ----------------
-void gameScreen()
+// ---------------- SISTEMA DE ENEMIGOS CON HILOS MEJORADO ----------------
+
+// Declaración forward
+struct EnemySystem;
+
+struct EnemyThreadData {
+    Enemigo* enemigo;
+    int* direccionX;
+    EnemySystem* system;
+    pthread_mutex_t* mutex;
+    int enemyIndex;
+    
+    bool isActive();
+};
+
+struct EnemySystem {
+    vector<Enemigo> enemigos;
+    vector<int> direccionesX;
+    
+    vector<pthread_t> threads;
+    vector<bool> threadActive;
+    vector<EnemyThreadData*> threadData;
+    pthread_mutex_t systemMutex;
+    
+    // Constructor y destructor
+    EnemySystem();
+    ~EnemySystem();
+    
+    void cleanup();
+    bool isThreadActive(int index);
+    void setThreadActive(int index, bool value);
+    void createEnemies(int num);
+    bool checkCollisionWithPlayer(int naveX, int naveY);
+    bool checkInvasion();
+    void removeEnemy(int index);
+    void removeEnemyByPosition(int x, int y);
+    size_t size() const;
+    void drawEnemies();
+    vector<pair<int, int>> getEnemyPositions();
+};
+
+// Implementación de EnemyThreadData::isActive
+bool EnemyThreadData::isActive() {
+    return system->isThreadActive(enemyIndex);
+}
+
+// Función del hilo del enemigo MEJORADA
+void* enemyThread(void* arg) {
+    EnemyThreadData* data = static_cast<EnemyThreadData*>(arg);
+    
+    // Semilla única para cada hilo
+    unsigned int seed = time(NULL) + (unsigned int)data->enemyIndex;
+    
+    int movementCounter = 0;
+    const int MOVEMENT_INTERVAL = 5; // Moverse cada 5 iteraciones
+    
+    while (data->isActive()) {
+        usleep(33000); // ~30 FPS (más lento para dar chance al jugador)
+        
+        movementCounter++;
+        if (movementCounter >= MOVEMENT_INTERVAL) {
+            movementCounter = 0;
+            
+            // Intentar obtener el mutex sin bloquear
+            if (pthread_mutex_trylock(data->mutex) == 0) {
+                int currentX = data->enemigo->getX();
+                int currentY = data->enemigo->getY();
+                
+                // Movimiento más simple y predecible
+                int movimiento = rand_r(&seed) % 8; // 0-7
+                
+                switch (movimiento) {
+                    case 0: 
+                    case 1: // Izquierda (25% probabilidad)
+                        if (currentX > 3) data->enemigo->moveLeft(1); 
+                        break;
+                    case 2: 
+                    case 3: // Derecha (25% probabilidad)
+                        if (currentX < 75) data->enemigo->moveRight(1); 
+                        break;
+                    case 4: 
+                    case 5: // Abajo (25% probabilidad)
+                        if (currentY < 22) data->enemigo->moveDown(1); 
+                        break;
+                    case 6: // Arriba (12.5% probabilidad)
+                        if (currentY > 2) data->enemigo->moveDown(-1); 
+                        break;
+                    case 7: // No moverse (12.5% probabilidad)
+                        break;
+                }
+                
+                pthread_mutex_unlock(data->mutex);
+            }
+            // Si no podemos obtener el mutex, omitimos este movimiento
+        }
+    }
+    
+    return NULL;
+}
+
+// Implementaciones de EnemySystem MEJORADAS
+EnemySystem::EnemySystem() {
+    pthread_mutex_init(&systemMutex, NULL);
+}
+
+EnemySystem::~EnemySystem() {
+    cleanup();
+    pthread_mutex_destroy(&systemMutex);
+}
+
+void EnemySystem::cleanup() {
+    // Detener todos los hilos
+    for (size_t i = 0; i < threadActive.size(); i++) {
+        threadActive[i] = false;
+    }
+    
+    // Esperar a que los hilos terminen (máximo 2 segundos)
+    time_t startTime = time(NULL);
+    for (size_t i = 0; i < threads.size(); i++) {
+        if (threads[i] != 0) {
+            int attempts = 0;
+            while (attempts < 20) { // 20 intentos de 100ms = 2 segundos
+                void* result;
+                if (pthread_tryjoin_np(threads[i], &result) == 0) {
+                    break; // Hilo terminado
+                }
+                usleep(100000); // 100ms
+                attempts++;
+                
+                // Timeout después de 2 segundos
+                if (time(NULL) - startTime > 2) {
+                    pthread_cancel(threads[i]);
+                    break;
+                }
+            }
+        }
+    }
+    
+    // Limpiar datos
+    pthread_mutex_lock(&systemMutex);
+    for (auto data : threadData) {
+        if (data) {
+            delete data;
+        }
+    }
+    
+    threads.clear();
+    threadActive.clear();
+    threadData.clear();
+    enemigos.clear();
+    direccionesX.clear();
+    
+    pthread_mutex_unlock(&systemMutex);
+}
+
+bool EnemySystem::isThreadActive(int index) {
+    if (index < 0 || index >= (int)threadActive.size()) {
+        return false;
+    }
+    return threadActive[index];
+}
+
+void EnemySystem::setThreadActive(int index, bool value) {
+    if (index >= 0 && index < (int)threadActive.size()) {
+        threadActive[index] = value;
+    }
+}
+
+void EnemySystem::createEnemies(int num) {
+    cleanup();
+    
+    pthread_mutex_lock(&systemMutex);
+    
+    // Limitar número máximo para evitar sobrecarga
+    if (num > 15) num = 15;
+    
+    for (int i = 0; i < num; i++) {
+        enemigos.emplace_back(i * 8 + 10, 3 + (i % 3));
+        direccionesX.push_back((i % 2 == 0) ? 1 : -1);
+        
+        threadActive.push_back(true);
+        threads.push_back(0);
+        
+        EnemyThreadData* data = new EnemyThreadData{
+            &enemigos.back(),
+            &direccionesX.back(),
+            this,
+            &systemMutex,
+            i
+        };
+        threadData.push_back(data);
+    }
+    
+    pthread_mutex_unlock(&systemMutex);
+    
+    // Crear hilos
+    for (int i = 0; i < num; i++) {
+        if (pthread_create(&threads[i], NULL, &enemyThread, threadData[i]) != 0) {
+            cerr << "Error creando hilo para enemigo " << i << endl;
+            setThreadActive(i, false);
+        }
+    }
+}
+
+bool EnemySystem::checkCollisionWithPlayer(int naveX, int naveY) {
+    pthread_mutex_lock(&systemMutex);
+    
+    bool collision = false;
+    for (auto &enemigo : enemigos) {
+        if (enemigo.getX() == naveX && enemigo.getY() == naveY) {
+            collision = true;
+            break;
+        }
+    }
+    
+    pthread_mutex_unlock(&systemMutex);
+    return collision;
+}
+
+bool EnemySystem::checkInvasion() {
+    pthread_mutex_lock(&systemMutex);
+    
+    bool invasion = false;
+    for (auto &enemigo : enemigos) {
+        if (enemigo.getY() >= 22) {
+            invasion = true;
+            break;
+        }
+    }
+    
+    pthread_mutex_unlock(&systemMutex);
+    return invasion;
+}
+
+void EnemySystem::removeEnemy(int index) {
+    if (index < 0 || index >= (int)enemigos.size()) return;
+    
+    // Detener el hilo PRIMERO
+    setThreadActive(index, false);
+    
+    // Esperar un poco para que el hilo se detenga
+    usleep(50000); // 50ms
+    
+    pthread_mutex_lock(&systemMutex);
+    
+    // Eliminar elementos
+    if (index < (int)enemigos.size()) {
+        enemigos.erase(enemigos.begin() + index);
+    }
+    if (index < (int)direccionesX.size()) {
+        direccionesX.erase(direccionesX.begin() + index);
+    }
+    
+    // Reindexar los threadData restantes
+    for (int i = index + 1; i < (int)threadData.size(); i++) {
+        if (threadData[i]) {
+            threadData[i]->enemyIndex = i - 1;
+        }
+    }
+    
+    if (index < (int)threadData.size()) {
+        delete threadData[index];
+        threadData.erase(threadData.begin() + index);
+    }
+    
+    if (index < (int)threadActive.size()) {
+        threadActive.erase(threadActive.begin() + index);
+    }
+    
+    if (index < (int)threads.size()) {
+        threads.erase(threads.begin() + index);
+    }
+    
+    pthread_mutex_unlock(&systemMutex);
+}
+
+void EnemySystem::removeEnemyByPosition(int x, int y) {
+    pthread_mutex_lock(&systemMutex);
+    
+    for (int i = enemigos.size() - 1; i >= 0; i--) {
+        if (enemigos[i].getX() == x && enemigos[i].getY() == y) {
+            pthread_mutex_unlock(&systemMutex); // IMPORTANTE: liberar antes de removeEnemy
+            removeEnemy(i);
+            return;
+        }
+    }
+    
+    pthread_mutex_unlock(&systemMutex);
+}
+
+size_t EnemySystem::size() const {
+    return enemigos.size();
+}
+
+void EnemySystem::drawEnemies() {
+    pthread_mutex_lock(&systemMutex);
+    
+    setColor(12);
+    for (int i = 0; i < (int)enemigos.size(); i++) {
+        gotoxy(enemigos[i].getX(), enemigos[i].getY());
+        // Carácter más simple para mejor rendimiento
+        cout << "X";
+    }
+    
+    pthread_mutex_unlock(&systemMutex);
+}
+
+vector<pair<int, int>> EnemySystem::getEnemyPositions() {
+    pthread_mutex_lock(&systemMutex);
+    
+    vector<pair<int, int>> positions;
+    for (auto &enemigo : enemigos) {
+        positions.push_back({enemigo.getX(), enemigo.getY()});
+    }
+    
+    pthread_mutex_unlock(&systemMutex);
+    return positions;
+}
+
+// ---------------- GAME LOOP ----------------
+
+void runGame(int enemyCount, int wavesToWin)
 {
-    //Variables globales de la partida jugandose
     bool gameRunning = true;
+    bool inGame = true;
     int score = 0;
     int naveX = 40;
     int naveY = 20;
+    int match = 0;
 
-    //Posiciones de los disparos de la anave
     vector<pair<int, int>> disparos;
+    EnemySystem enemySystem;
 
-    //Posicionees, velocidades y movimientos de las entidades
-    vector<Enemigo> enemigos;
-    vector<int> direccionesX;
-    vector<int> velocidadHorizontal;
-    vector<int> velocidadVertical;
-    vector<int> contadoresH;
-    vector<int> contadoresV;
-    vector<int> tiposMovimiento;
-
-    // Crear enemigos
-    for (int i = 0; i < 5; i++) {
-        enemigos.emplace_back(i * 12 + 10, 3 + (i % 3));
-        direccionesX.push_back((i % 2 == 0) ? 1 : -1);
-        velocidadHorizontal.push_back(5 + i); // frames por movimiento horizontal
-        velocidadVertical.push_back(15 + i*5); // frames por movimiento vertical
-        contadoresH.push_back(0);
-        contadoresV.push_back(0);
-        tiposMovimiento.push_back(i % 3);
-    }
-
-    bool inGame = false;
-
-    // Pantalla inicial
-    clearScreen();
-    drawFrame();
-    setColor(15);
-    gotoxy(30, 8); cout << "GALAGA - MODO JUEGO";
-    setColor(14);
-    gotoxy(15, 12); cout << "ESPACIO - Disparar ";
-    gotoxy(15, 14); cout << "A/D - Mover nave";
-    gotoxy(15, 16); cout << "M - Terminar partida y guardar puntaje";
-    gotoxy(15, 18); cout << "Q - Salir sin guardar";
-    setColor(13);
-    gotoxy(20, 20); cout << "¡Destruye enemigos antes de que te alcancen!";
-    setColor(10);
-    gotoxy(20, 22); cout << "Presiona cualquier tecla para comenzar...";
-    getchLinux();
-    inGame = true;
+    // Crear primera oleada de enemigos
+    enemySystem.createEnemies(enemyCount);
 
     while (gameRunning)
     {
-        if (inGame) {
-
+        if (inGame)
+        {
             // Mover disparos
-            for (int i = disparos.size() - 1; i >= 0; i--) {
+            for (int i = disparos.size() - 1; i >= 0; i--)
+            {
                 disparos[i].second--;
                 if (disparos[i].second < 2)
                     disparos.erase(disparos.begin() + i);
             }
 
             // Colisiones disparos - enemigos
-            for (int i = disparos.size() - 1; i >= 0; i--) {
-                for (int j = enemigos.size() - 1; j >= 0; j--) {
-                    if (disparos[i].first == enemigos[j].getX() &&
-                        disparos[i].second == enemigos[j].getY()) {
+            vector<pair<int, int>> enemyPositions = enemySystem.getEnemyPositions();
+            for (int i = disparos.size() - 1; i >= 0; i--)
+            {
+                for (int j = enemyPositions.size() - 1; j >= 0; j--)
+                {
+                    if (disparos[i].first == enemyPositions[j].first &&
+                        disparos[i].second == enemyPositions[j].second)
+                    {
                         score += 200;
                         disparos.erase(disparos.begin() + i);
-                        enemigos.erase(enemigos.begin() + j);
-                        direccionesX.erase(direccionesX.begin() + j);
-                        velocidadHorizontal.erase(velocidadHorizontal.begin() + j);
-                        velocidadVertical.erase(velocidadVertical.begin() + j);
-                        contadoresH.erase(contadoresH.begin() + j);
-                        contadoresV.erase(contadoresV.begin() + j);
-                        tiposMovimiento.erase(tiposMovimiento.begin() + j);
+                        enemySystem.removeEnemyByPosition(enemyPositions[j].first, enemyPositions[j].second);
                         break;
                     }
                 }
             }
 
-            // Movimiento de enemigos
-            for (int i = 0; i < enemigos.size(); i++) {
-                contadoresH[i]++;
-                contadoresV[i]++;
-
-                // Movimiento horizontal
-                if (contadoresH[i] >= velocidadHorizontal[i]) {
-                    contadoresH[i] = 0;
-                    if (direccionesX[i] == 1) enemigos[i].moveRight(1);
-                    else enemigos[i].moveLeft(1);
-                    if (enemigos[i].getX() <= 3 || enemigos[i].getX() >= 75)
-                        direccionesX[i] *= -1;
+            // Generar nueva oleada si no quedan enemigos
+            if (enemySystem.size() == 0)
+            {
+                match++;
+                if (match >= wavesToWin)
+                {
+                    // Victoria
+                    setColor(10);
+                    gotoxy(30, 12);
+                    cout << "¡VICTORIA TOTAL!";
+                    gotoxy(28, 14);
+                    cout << "¡Todos los enemigos eliminados!";
+                    setColor(14);
+                    gotoxy(32, 16);
+                    cout << "BONUS: +1000 puntos";
+                    setColor(7);
+                    score += 1000;
+                    sleep(4);
+                    string playerName = getPlayerName(true);
+                    highScores.push_back({playerName, score});
+                    showScoresScreen();
+                    gameRunning = false;
+                    continue;
                 }
-
-                // Movimiento vertical
-                if (contadoresV[i] >= velocidadVertical[i]) {
-                    contadoresV[i] = 0;
-                    enemigos[i].moveDown(1);
+                else
+                {
+                    // Nueva oleada
+                    enemySystem.createEnemies(enemyCount);
                 }
             }
 
-            // Revisar si hay victoria
-            if (enemigos.empty()) {
-                setColor(10);
+            // Colisión directa con la nave
+            if (enemySystem.checkCollisionWithPlayer(naveX, naveY))
+            {
+                setColor(12);
                 gotoxy(30, 12);
-                cout << "¡VICTORIA TOTAL!";
-                gotoxy(28, 14);
-                cout << "¡Todos los enemigos eliminados!";
-                setColor(14);
-                gotoxy(32, 16);
-                cout << "BONUS: +1000 puntos";
+                cout << "¡COLISIÓN DIRECTA!";
+                gotoxy(35, 14);
+                cout << "GAME OVER";
                 setColor(7);
-                score += 1000;
-                sleep(4);
-                string playerName = getPlayerName(true);
-                highScores.push_back({playerName, score});
-                showScoresScreen();
+                sleep(3);
+                if (score > 0)
+                {
+                    string playerName = getPlayerName();
+                    highScores.push_back({playerName, score});
+                    showScoresScreen();
+                }
                 gameRunning = false;
                 continue;
             }
 
-            // Colisión directa con la nave
-            bool gameOver = false;
-            for (auto &enemigo : enemigos) {
-                if (enemigo.getX() == naveX && enemigo.getY() >= naveY - 1) {
-                    setColor(12);
-                    gotoxy(30, 12); cout << "¡COLISIÓN DIRECTA!";
-                    gotoxy(35, 14); cout << "GAME OVER";
-                    setColor(7);
-                    sleep(3);
-                    if (score > 0) {
-                        string playerName = getPlayerName();
-                        highScores.push_back({playerName, score});
-                        showScoresScreen();
-                    }
-                    gameOver = true;
-                    break;
-                }
-            }
-
             // Invasión completada
-            for (auto &enemigo : enemigos) {
-                if (enemigo.getY() >= 22) {
-                    setColor(12);
-                    gotoxy(28, 12); cout << "¡INVASIÓN COMPLETADA!";
-                    gotoxy(35, 14); cout << "GAME OVER";
-                    setColor(7);
-                    sleep(3);
-                    if (score > 0) {
-                        string playerName = getPlayerName();
-                        highScores.push_back({playerName, score});
-                        showScoresScreen();
-                    }
-                    gameOver = true;
-                    break;
+            if (enemySystem.checkInvasion())
+            {
+                setColor(12);
+                gotoxy(28, 12);
+                cout << "¡INVASIÓN COMPLETADA!";
+                gotoxy(35, 14);
+                cout << "GAME OVER";
+                setColor(7);
+                sleep(3);
+                if (score > 0)
+                {
+                    string playerName = getPlayerName();
+                    highScores.push_back({playerName, score});
+                    showScoresScreen();
                 }
-            }
-
-            if (gameOver) {
                 gameRunning = false;
                 continue;
             }
@@ -509,89 +788,192 @@ void gameScreen()
             drawFrame();
 
             setColor(15);
-            gotoxy(25, 1); cout << "GALAGA - PUNTAJE: " << score;
+            gotoxy(25, 1);
+            cout << "GALAGA - PUNTAJE: " << score;
             setColor(14);
-            gotoxy(2, 1); cout << "ENEMIGOS: " << enemigos.size();
+            gotoxy(2, 1);
+            cout << "ENEMIGOS: " << enemySystem.size();
             setColor(13);
-            gotoxy(60, 1); cout << "DISPAROS: " << disparos.size();
-            gotoxy(50, 1); cout << "VIDAS: ♥♥♥";
+            gotoxy(60, 1);
+            cout << "DISPAROS: " << disparos.size();
+            gotoxy(50, 1);
+            cout << "VIDAS: ♥♥♥";
+            gotoxy(35, 1);
+            cout << "OLEADA: " << (match + 1) << "/" << wavesToWin;
 
             // Disparos
             setColor(11);
-            for (auto &d : disparos) {
-                gotoxy(d.first, d.second); cout << "|";
+            for (auto &d : disparos)
+            {
+                gotoxy(d.first, d.second);
+                cout << "|";
             }
 
             // Enemigos
-            setColor(12);
-            for (int i = 0; i < enemigos.size(); i++) {
-                gotoxy(enemigos[i].getX(), enemigos[i].getY());
-                switch (tiposMovimiento[i]) {
-                    case 0: cout << "X"; break;
-                    case 1: cout << "▼"; break;
-                    case 2: cout << "◆"; break;
-                }
-            }
+            enemySystem.drawEnemies();
 
             // Nave
             setColor(10);
-            gotoxy(naveX, naveY); cout << "A";
+            gotoxy(naveX, naveY);
+            cout << "A";
 
             // Instrucciones
             setColor(11);
             gotoxy(2, 22);
             cout << "A/D: Mover - ESPACIO: Disparar - M: Terminar - Q: Salir - P: Pausa";
-            setColor(7);
 
             // Controles
-            if (kbhit()) {
+            if (kbhit())
+            {
                 int tecla = getchLinux();
-                switch (tecla) {
-                    case 'a': case 'A': if (naveX > 2) naveX--; break;
-                    case 'd': case 'D': if (naveX < 77) naveX++; break;
-                    case ' ': if (disparos.size() < 5) disparos.push_back({naveX, naveY - 1}); break;
-                    case 'm': case 'M':
-                        if (score > 0) {
-                            string playerName = getPlayerName();
-                            highScores.push_back({playerName, score});
-                            showScoresScreen();
-                        }
-                        gameRunning = false; break;
-                    case 'q': case 'Q': gameRunning = false; break;
-                    case 'p': case 'P': inGame = false; break;
+                switch (tecla)
+                {
+                case 'a':
+                case 'A':
+                    if (naveX > 2)
+                        naveX--;
+                    break;
+                case 'd':
+                case 'D':
+                    if (naveX < 77)
+                        naveX++;
+                    break;
+                case ' ':
+                    if (disparos.size() < 5)
+                        disparos.push_back({naveX, naveY - 1});
+                    break;
+                case 'm':
+                case 'M':
+                    if (score > 0)
+                    {
+                        string playerName = getPlayerName();
+                        highScores.push_back({playerName, score});
+                        showScoresScreen();
+                    }
+                    gameRunning = false;
+                    break;
+                case 'q':
+                case 'Q':
+                    gameRunning = false;
+                    break;
+                case 'p':
+                case 'P':
+                    inGame = false;
+                    break;
                 }
             }
-        } else {
+        }
+        else
+        {
             // Pausa
             clearScreen();
             drawFrame();
-            setColor(15); gotoxy(30, 8); cout << "JUEGO PAUSADO";
-            gotoxy(28, 10); cout << "PUNTAJE: " << score;
+            setColor(15);
+            gotoxy(30, 8);
+            cout << "JUEGO PAUSADO";
+            gotoxy(28, 10);
+            cout << "PUNTAJE: " << score;
             setColor(14);
-            gotoxy(15, 14); cout << "ESPACIO - Continuar jugando";
-            gotoxy(15, 16); cout << "M - Terminar y guardar puntaje";
-            gotoxy(15, 18); cout << "Q - Salir sin guardar";
-            setColor(13); gotoxy(8, 21);
+            gotoxy(15, 14);
+            cout << "ESPACIO - Continuar jugando";
+            gotoxy(15, 16);
+            cout << "M - Terminar y guardar puntaje";
+            gotoxy(15, 18);
+            cout << "Q - Salir sin guardar";
+            setColor(13);
+            gotoxy(8, 21);
             cout << "PUNTUACIÓN: Enemigo destruido = +200pts, Victoria = +1000pts";
 
-            if (kbhit()) {
+            if (kbhit())
+            {
                 int tecla = getchLinux();
-                switch (tecla) {
-                    case ' ': inGame = true; break;
-                    case 'm': case 'M':
-                        if (score > 0) {
-                            string playerName = getPlayerName();
-                            highScores.push_back({playerName, score});
-                            showScoresScreen();
-                        }
-                        gameRunning = false; break;
-                    case 'q': case 'Q': gameRunning = false; break;
+                switch (tecla)
+                {
+                case ' ':
+                    inGame = true;
+                    break;
+                case 'm':
+                case 'M':
+                    if (score > 0)
+                    {
+                        string playerName = getPlayerName();
+                        highScores.push_back({playerName, score});
+                        showScoresScreen();
+                    }
+                    gameRunning = false;
+                    break;
+                case 'q':
+                case 'Q':
+                    gameRunning = false;
+                    break;
                 }
             }
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        this_thread::sleep_for(chrono::milliseconds(50));
     }
+}
+
+// ---------------- MENÚ PRINCIPAL ----------------
+void gameScreen()
+{
+    // Pantalla inicial
+    clearScreen();
+    drawFrame();
+    setColor(15);
+    gotoxy(32, 6);
+    cout << "GALAGA";
+    setColor(14);
+    gotoxy(14, 9);
+    cout << "Selecciona tu modo de juego  ";
+    gotoxy(14, 10);
+    cout << "1 - Modo 1 (5 enemigos por oleada, 5 oleadas)";
+    gotoxy(14, 11);
+    cout << "2 - Modo 2 (8 enemigos por oleada, 5 oleadas)";
+    gotoxy(14, 12);
+    cout << "3 - Modo 3 (10 enemigos por oleada, 5 oleadas)";
+
+    gotoxy(14, 14);
+    cout << "ESPACIO - Disparar ";
+    gotoxy(14, 15);
+    cout << "A/D - Mover nave";
+    gotoxy(14, 16);
+    cout << "M - Terminar partida y guardar puntaje";
+    gotoxy(14, 17);
+    cout << "Q - Salir sin guardar";
+    setColor(13);
+    gotoxy(20, 21);
+    cout << "¡Destruye enemigos antes de que te disparen!";
+    setColor(10);
+    gotoxy(20, 22);
+    cout << "Presiona cualquier tecla para comenzar...";
+
+    char gameMode = getchLinux();
+
+    int enemyCount = 5;
+    int wavesToWin = 5;
+
+    switch (gameMode)
+    {
+    case '1':
+        enemyCount = 1;
+        wavesToWin = 1; // proof
+        break;
+    case '2':
+        enemyCount = 8;
+        wavesToWin = 5;
+        break;
+    case '3':
+        enemyCount = 10;
+        wavesToWin = 5;
+        break;
+    default:
+        enemyCount = 5;
+        wavesToWin = 5;
+        break;
+    }
+
+    runGame(enemyCount, wavesToWin);
 }
 
 // Menú principal
@@ -659,13 +1041,13 @@ void showMainMenu()
             setColor(11);
             gotoxy(28, 10);
             cout << "Desarrollado por: ";
-            gotoxy(28,11);
+            gotoxy(28, 11);
             cout << "Marco Díaz";
-            gotoxy(28,12);
+            gotoxy(28, 12);
             cout << "Marcelo Detlefsen";
-            gotoxy(28,13);
+            gotoxy(28, 13);
             cout << "Alejandro Jerez";
-            gotoxy(28,14);
+            gotoxy(28, 14);
             cout << "Julián Divas";
             gotoxy(28, 15);
             cout << "Curso: Programacion de microprocesadores";
