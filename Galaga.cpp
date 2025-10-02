@@ -26,33 +26,37 @@ struct Score
 vector<Score> highScores;
 
 // Estructura para disparos individuales de cada enemigo
-struct EnemyShot {
+struct EnemyShot
+{
     int x;
     int y;
     bool active;
-    
+
     EnemyShot(int sx, int sy) : x(sx), y(sy), active(true) {}
 };
 
-struct PlayerThreadData {
-    int* naveX;
-    int* naveY;
-    vector<pair<int, int>>* disparos;
-    pthread_mutex_t* mutex;
-    bool* gameRunning;
-    bool* inGame;
-    int* score;
+struct PlayerThreadData
+{
+    int *naveX;
+    int *naveY;
+    vector<pair<int, int>> *disparos;
+    pthread_mutex_t *mutex;
+    bool *gameRunning;
+    bool *inGame;
+    int *score;
     char lastKey;
     bool hasNewKey;
     pthread_mutex_t keyMutex;
-    
-    PlayerThreadData() {
+
+    PlayerThreadData()
+    {
         pthread_mutex_init(&keyMutex, NULL);
         lastKey = 0;
         hasNewKey = false;
     }
-    
-    ~PlayerThreadData() {
+
+    ~PlayerThreadData()
+    {
         pthread_mutex_destroy(&keyMutex);
     }
 };
@@ -384,47 +388,51 @@ void showScoresScreen()
 // Declaración forward
 struct EnemySystem;
 
-struct EnemyThreadData {
-    Enemigo* enemigo;
-    int* direccionX;
-    EnemySystem* system;
-    pthread_mutex_t* mutex;
+struct EnemyThreadData
+{
+    Enemigo *enemigo;
+    int *direccionX;
+    EnemySystem *system;
+    pthread_mutex_t *mutex;
     int enemyIndex;
-    
+
     // Disparos del enemigo
     vector<EnemyShot> shots;
     pthread_mutex_t shotMutex;
-    
+
     bool isActive();
 
-    //Constructores
-    EnemyThreadData() {
+    // Constructores
+    EnemyThreadData()
+    {
         pthread_mutex_init(&shotMutex, NULL);
     }
-    
-    EnemyThreadData(Enemigo* e, int* dir, EnemySystem* sys, pthread_mutex_t* mtx, int idx) 
-        : enemigo(e), direccionX(dir), system(sys), mutex(mtx), enemyIndex(idx) {
-        pthread_mutex_init(&shotMutex, NULL);
-    }
-    
 
-    ~EnemyThreadData() {
+    EnemyThreadData(Enemigo *e, int *dir, EnemySystem *sys, pthread_mutex_t *mtx, int idx)
+        : enemigo(e), direccionX(dir), system(sys), mutex(mtx), enemyIndex(idx)
+    {
+        pthread_mutex_init(&shotMutex, NULL);
+    }
+
+    ~EnemyThreadData()
+    {
         pthread_mutex_destroy(&shotMutex);
     }
 };
 
-struct EnemySystem {
+struct EnemySystem
+{
     vector<Enemigo> enemigos;
     vector<int> direccionX;
     vector<pthread_t> threads;
     vector<bool> threadActive;
-    vector<EnemyThreadData*> threadData;
+    vector<EnemyThreadData *> threadData;
     pthread_mutex_t systemMutex;
-    
+
     // Constructor y destructor
     EnemySystem();
     ~EnemySystem();
-    
+
     void cleanup();
     bool isThreadActive(int index);
     void setThreadActive(int index, bool value);
@@ -440,173 +448,201 @@ struct EnemySystem {
     bool checkAnyShotCollisionWithPlayer(int naveX, int naveY);
 };
 
-
-bool EnemyThreadData::isActive() {
+bool EnemyThreadData::isActive()
+{
     return system->isThreadActive(enemyIndex);
 }
 
 // Función del hilo del enemigo MEJORADA
-void* enemyThread(void* arg) {
-    EnemyThreadData* data = static_cast<EnemyThreadData*>(arg);
-    
+void *enemyThread(void *arg)
+{
+    EnemyThreadData *data = static_cast<EnemyThreadData *>(arg);
+
     // Semilla única para cada hilo
     unsigned int seed = time(NULL) + (unsigned int)data->enemyIndex;
-    
+
     int movementCounter = 0;
     int shootCounter = 0;
     const int MOVEMENT_INTERVAL = 10; // Moverse cada 5 iteraciones
-    const int SHOOT_INTERVAL = 30; // Disparar cada 30 iteraciones
+    const int SHOOT_INTERVAL = 30;    // Disparar cada 30 iteraciones
     const int SHOT_MOVE_INTERVAL = 2; // Mover disparo cada 2 iteraciones
     int shotMoveCounter = 0;
 
-    while (data->isActive()) {
+    while (data->isActive())
+    {
         usleep(33000); // ~30 FPS (más lento para dar chance al jugador)
-        
+
         movementCounter++;
         shootCounter++;
         shotMoveCounter++;
-        if (movementCounter >= MOVEMENT_INTERVAL) {
+        if (movementCounter >= MOVEMENT_INTERVAL)
+        {
             movementCounter = 0;
-            
+
             // Intentar obtener el mutex sin bloquear
-            if(pthread_mutex_trylock(data->mutex) == 0) {
+            if (pthread_mutex_trylock(data->mutex) == 0)
+            {
                 // Verificar de nuevo si todavía activo después de obtener el lock
-                if (!data->system->isThreadActive(data->enemyIndex)) {
+                if (!data->system->isThreadActive(data->enemyIndex))
+                {
                     pthread_mutex_unlock(data->mutex);
                     break;
                 }
 
-                Enemigo& enemigo = data->system->enemigos[data->enemyIndex];
+                Enemigo &enemigo = data->system->enemigos[data->enemyIndex];
                 int currentX = enemigo.getX();
                 int currentY = enemigo.getY();
-                
+
                 // Movimiento más simple y predecible
                 int movimiento = rand_r(&seed) % 7; // 0-7
-                
-                switch (movimiento) {
-                    case 0:
-                        
-                    case 1: // Izquierda (25% probabilidad)
-                        if (currentX > 3) enemigo.moveLeft(1); 
-                        break;
-                    case 2: 
-                        
-                    case 3: // Derecha (25% probabilidad)
-                        if (currentX < 75) enemigo.moveRight(1); 
-                        break;
-                    case 4: 
-                        
-                    case 5: // Abajo (25% probabilidad)
-                        if (currentY < 22) enemigo.moveDown(1); 
-                        break;
-                    case 6: // Arriba (12.5% probabilidad)
-                        if (currentY > 2) enemigo.moveUp(1); 
-                        break;
 
+                switch (movimiento)
+                {
+                case 0:
+
+                case 1: // Izquierda (25% probabilidad)
+                    if (currentX > 3)
+                        enemigo.moveLeft(1);
+                    break;
+                case 2:
+
+                case 3: // Derecha (25% probabilidad)
+                    if (currentX < 75)
+                        enemigo.moveRight(1);
+                    break;
+                case 4:
+
+                case 5: // Abajo (25% probabilidad)
+                    if (currentY < 22)
+                        enemigo.moveDown(1);
+                    break;
+                case 6: // Arriba (12.5% probabilidad)
+                    if (currentY > 2)
+                        enemigo.moveUp(1);
+                    break;
                 }
                 pthread_mutex_unlock(data->mutex);
             }
             // Si no podemos obtener el mutex, omitimos este movimiento
         }
 
-        if (shotMoveCounter >= SHOT_MOVE_INTERVAL) {
+        if (shotMoveCounter >= SHOT_MOVE_INTERVAL)
+        {
             shotMoveCounter = 0;
             pthread_mutex_lock(&data->shotMutex);
-            for (int i = data->shots.size() - 1; i >= 0; i--) {
-                if (data->shots[i].active) {
+            for (int i = data->shots.size() - 1; i >= 0; i--)
+            {
+                if (data->shots[i].active)
+                {
                     data->shots[i].y++;
-                    if (data->shots[i].y > 23) {
+                    if (data->shots[i].y > 23)
+                    {
                         data->shots[i].active = false;
                     }
                 }
             }
             // Eliminar disparos inactivos
             data->shots.erase(remove_if(data->shots.begin(), data->shots.end(),
-                                        [](const EnemyShot& s) { return !s.active; }),
+                                        [](const EnemyShot &s)
+                                        { return !s.active; }),
                               data->shots.end());
             pthread_mutex_unlock(&data->shotMutex);
         }
 
-        if (shootCounter>= SHOOT_INTERVAL) {
+        if (shootCounter >= SHOOT_INTERVAL)
+        {
             shootCounter = 0;
             // Disparar
-            if(rand_r(&seed) % 100 < 70) { // 70% de probabilidad de disparar
-                if(pthread_mutex_trylock(data->mutex) == 0) {
-                    if (data->system->isThreadActive(data->enemyIndex)) {
+            if (rand_r(&seed) % 100 < 70)
+            { // 70% de probabilidad de disparar
+                if (pthread_mutex_trylock(data->mutex) == 0)
+                {
+                    if (data->system->isThreadActive(data->enemyIndex))
+                    {
                         int currentX = data->system->enemigos[data->enemyIndex].getX();
                         int currentY = data->system->enemigos[data->enemyIndex].getY();
                         pthread_mutex_unlock(data->mutex);
 
-                        if (currentY<23 && currentY>2){
+                        if (currentY < 23 && currentY > 2)
+                        {
                             pthread_mutex_unlock(data->mutex);
 
-                            if(data->shots.size() < 5) { // Limitar número de disparos activos
+                            if (data->shots.size() < 5)
+                            { // Limitar número de disparos activos
                                 pthread_mutex_lock(&data->shotMutex);
 
-                                if(data->shots.size() < 3){
+                                if (data->shots.size() < 3)
+                                {
                                     data->shots.emplace_back(currentX, currentY + 1);
                                 }
                                 pthread_mutex_unlock(&data->shotMutex);
                             }
-
-
                         }
-                    } else {
+                    }
+                    else
+                    {
                         pthread_mutex_unlock(data->mutex);
                     }
                 }
             }
         }
     }
-    
+
     return NULL;
 }
 
 // ============= HILO DEL JUGADOR =============
-void* playerThread(void* arg) {
-    PlayerThreadData* data = static_cast<PlayerThreadData*>(arg);
-    
-    while (*(data->gameRunning) && *(data->inGame)) {
+void *playerThread(void *arg)
+{
+    PlayerThreadData *data = static_cast<PlayerThreadData *>(arg);
+
+    while (*(data->gameRunning) && *(data->inGame))
+    {
         usleep(16000); // ~60 FPS
-        
+
         // Verificar si hay tecla presionada
         pthread_mutex_lock(&data->keyMutex);
-        if (data->hasNewKey) {
+        if (data->hasNewKey)
+        {
             char tecla = data->lastKey;
             data->hasNewKey = false;
             pthread_mutex_unlock(&data->keyMutex);
-            
+
             // Procesar la tecla
             pthread_mutex_lock(data->mutex);
-            
-            switch (tecla) {
-                case 'a':
-                case 'A':
-                    if (*(data->naveX) > 2)
-                        (*(data->naveX))--;
-                    break;
-                case 'd':
-                case 'D':
-                    if (*(data->naveX) < 77)
-                        (*(data->naveX))++;
-                    break;
-                case ' ':
-                    if (data->disparos->size() < 5)
-                        data->disparos->push_back({*(data->naveX), *(data->naveY) - 1});
-                    break;
+
+            switch (tecla)
+            {
+            case 'a':
+            case 'A':
+                if (*(data->naveX) > 2)
+                    (*(data->naveX))--;
+                break;
+            case 'd':
+            case 'D':
+                if (*(data->naveX) < 77)
+                    (*(data->naveX))++;
+                break;
+            case ' ':
+                if (data->disparos->size() < 5)
+                    data->disparos->push_back({*(data->naveX), *(data->naveY) - 1});
+                break;
             }
-            
+
             pthread_mutex_unlock(data->mutex);
-        } else {
+        }
+        else
+        {
             pthread_mutex_unlock(&data->keyMutex);
         }
     }
-    
+
     return NULL;
 }
 
 // Implementaciones de EnemySystem MEJORADAS
-EnemySystem::EnemySystem() {
+EnemySystem::EnemySystem()
+{
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
@@ -616,89 +652,104 @@ EnemySystem::EnemySystem() {
     checkAnyShotCollisionWithPlayer(0, 0);
 }
 
-EnemySystem::~EnemySystem() {
+EnemySystem::~EnemySystem()
+{
     cleanup();
     pthread_mutex_destroy(&systemMutex);
 }
 
-void EnemySystem::cleanup() {
+void EnemySystem::cleanup()
+{
     // Detener todos los hilos
-    for (size_t i = 0; i < threadActive.size(); i++) {
+    for (size_t i = 0; i < threadActive.size(); i++)
+    {
         setThreadActive(i, false);
     }
-    
+
     // Esperar a que los hilos terminen
-    for (size_t i = 0; i < threads.size(); i++) {
-        if (threads[i] != 0) {
+    for (size_t i = 0; i < threads.size(); i++)
+    {
+        if (threads[i] != 0)
+        {
             pthread_join(threads[i], NULL);
         }
     }
-    
+
     // Limpiar datos
     pthread_mutex_lock(&systemMutex);
-    for (auto data : threadData) {
-        if (data) {
+    for (auto data : threadData)
+    {
+        if (data)
+        {
             delete data;
         }
     }
-    
+
     threads.clear();
     threadActive.clear();
     threadData.clear();
     enemigos.clear();
-    
+
     pthread_mutex_unlock(&systemMutex);
 }
 
-bool EnemySystem::isThreadActive(int index) {
+bool EnemySystem::isThreadActive(int index)
+{
     pthread_mutex_lock(&systemMutex);
     bool ret = (index >= 0 && index < (int)threadActive.size()) && threadActive[index];
     pthread_mutex_unlock(&systemMutex);
     return ret;
 }
 
-void EnemySystem::setThreadActive(int index, bool value) {
+void EnemySystem::setThreadActive(int index, bool value)
+{
     pthread_mutex_lock(&systemMutex);
-    if (index >= 0 && index < (int)threadActive.size()) {
+    if (index >= 0 && index < (int)threadActive.size())
+    {
         threadActive[index] = value;
     }
     pthread_mutex_unlock(&systemMutex);
 }
 
-void EnemySystem::createEnemies(int num) {
+void EnemySystem::createEnemies(int num)
+{
     cleanup();
-    
+
     pthread_mutex_lock(&systemMutex);
-    
+
     // Limitar número máximo para evitar sobrecarga
-    if (num > 15) num = 15;
-    
-    for (int i = 0; i < num; i++) {
+    if (num > 15)
+        num = 15;
+
+    for (int i = 0; i < num; i++)
+    {
         enemigos.emplace_back(i * 8 + 10, 3 + (i % 3));
         threadActive.push_back(true);
         threads.push_back(0);
-        
-        EnemyThreadData* data = new EnemyThreadData{
+
+        EnemyThreadData *data = new EnemyThreadData{
             &enemigos.back(),
             &direccionX.emplace_back(1),
             this,
             &systemMutex,
-            i
-        };
+            i};
         threadData.push_back(data);
     }
-    
+
     pthread_mutex_unlock(&systemMutex);
-    
+
     // Crear hilos con verificación de error mejorada
-    for (int i = 0; i < num; i++) {
-        if (pthread_create(&threads[i], NULL, &enemyThread, threadData[i]) != 0) {
+    for (int i = 0; i < num; i++)
+    {
+        if (pthread_create(&threads[i], NULL, &enemyThread, threadData[i]) != 0)
+        {
             cerr << "Error creando hilo para enemigo " << i << endl;
             setThreadActive(i, false);
-            
+
             // Si falla la creación del hilo, eliminar el enemigo correspondiente
             pthread_mutex_lock(&systemMutex);
-            if (i < (int)enemigos.size()) {
+            if (i < (int)enemigos.size())
+            {
                 enemigos.erase(enemigos.begin() + i);
                 delete threadData[i];
                 threadData.erase(threadData.begin() + i);
@@ -706,10 +757,12 @@ void EnemySystem::createEnemies(int num) {
                 threads.erase(threads.begin() + i);
             }
             pthread_mutex_unlock(&systemMutex);
-            
+
             // Reindexar los elementos restantes
-            for (int j = i; j < (int)threadData.size(); j++) {
-                if (threadData[j]) {
+            for (int j = i; j < (int)threadData.size(); j++)
+            {
+                if (threadData[j])
+                {
                     threadData[j]->enemyIndex = j;
                 }
             }
@@ -718,140 +771,171 @@ void EnemySystem::createEnemies(int num) {
 }
 
 // Dibujar todos los disparos enemigos
-void EnemySystem::drawAllEnemyShots() {
+void EnemySystem::drawAllEnemyShots()
+{
     pthread_mutex_lock(&systemMutex);
-    
+
     setColor(12); // Rojo brillante
-    for (auto data : threadData) {
-        if (data) {
+    for (auto data : threadData)
+    {
+        if (data)
+        {
             pthread_mutex_lock(&data->shotMutex);
-            
-            for (auto &shot : data->shots) {
-                if (shot.active) {
+
+            for (auto &shot : data->shots)
+            {
+                if (shot.active)
+                {
                     gotoxy(shot.x, shot.y);
                     cout << "v";
                 }
             }
-            
+
             pthread_mutex_unlock(&data->shotMutex);
         }
     }
-    
+
     pthread_mutex_unlock(&systemMutex);
 }
 
-bool EnemySystem::checkCollisionWithPlayer(int naveX, int naveY) {
+bool EnemySystem::checkCollisionWithPlayer(int naveX, int naveY)
+{
     pthread_mutex_lock(&systemMutex);
-    
+
     bool collision = false;
-    for (auto &enemigo : enemigos) {
-        if (enemigo.getX() == naveX && enemigo.getY() == naveY) {
+    for (auto &enemigo : enemigos)
+    {
+        if (enemigo.getX() == naveX && enemigo.getY() == naveY)
+        {
             collision = true;
             break;
         }
     }
-    
+
     pthread_mutex_unlock(&systemMutex);
     return collision;
 }
 
-bool EnemySystem::checkInvasion() {
+bool EnemySystem::checkInvasion()
+{
     pthread_mutex_lock(&systemMutex);
-    
+
     bool invasion = false;
-    for (auto &enemigo : enemigos) {
-        if (enemigo.getY() >= 22) {
+    for (auto &enemigo : enemigos)
+    {
+        if (enemigo.getY() >= 22)
+        {
             invasion = true;
             break;
         }
     }
-    
+
     pthread_mutex_unlock(&systemMutex);
     return invasion;
 }
 
-void EnemySystem::removeEnemy(int index) {
-    if (index < 0 || index >= (int)enemigos.size()) return;
-    
+void EnemySystem::removeEnemy(int index)
+{
+    if (index < 0 || index >= (int)enemigos.size())
+        return;
+
     // Detener el hilo PRIMERO
     setThreadActive(index, false);
-    
+
     // Unir al hilo para esperar a que termine completamente
-    if (index < (int)threads.size() && threads[index] != 0) {
+    if (index < (int)threads.size() && threads[index] != 0)
+    {
         pthread_join(threads[index], NULL);
     }
-    
+
     pthread_mutex_lock(&systemMutex);
-    
+
     // Eliminar elementos
-    if (index < (int)enemigos.size()) {
+    if (index < (int)enemigos.size())
+    {
         enemigos.erase(enemigos.begin() + index);
     }
-    
+
     // Reindexar los threadData restantes
-    for (int i = index + 1; i < (int)threadData.size(); i++) {
-        if (threadData[i]) {
+    for (int i = index + 1; i < (int)threadData.size(); i++)
+    {
+        if (threadData[i])
+        {
             threadData[i]->enemyIndex = i - 1;
         }
     }
-    
-    if (index < (int)threadData.size()) {
+
+    if (index < (int)threadData.size())
+    {
         delete threadData[index];
         threadData.erase(threadData.begin() + index);
     }
-    
-    if (index < (int)threadActive.size()) {
+
+    if (index < (int)threadActive.size())
+    {
         threadActive.erase(threadActive.begin() + index);
     }
-    
-    if (index < (int)threads.size()) {
+
+    if (index < (int)threads.size())
+    {
         threads.erase(threads.begin() + index);
     }
-    
+
     pthread_mutex_unlock(&systemMutex);
 }
 
-void EnemySystem::removeEnemyByPosition(int x, int y) {
+void EnemySystem::removeEnemyByPosition(int x, int y)
+{
     pthread_mutex_lock(&systemMutex);
-    
-    for (int i = enemigos.size() - 1; i >= 0; i--) {
-        if (enemigos[i].getX() == x && enemigos[i].getY() == y) {
+
+    for (int i = enemigos.size() - 1; i >= 0; i--)
+    {
+        if (enemigos[i].getX() == x && enemigos[i].getY() == y)
+        {
             pthread_mutex_unlock(&systemMutex); // IMPORTANTE: liberar antes de removeEnemy
             removeEnemy(i);
             return;
         }
     }
-    
+
     pthread_mutex_unlock(&systemMutex);
 }
 
-size_t EnemySystem::size() const {
+size_t EnemySystem::size() const
+{
     return enemigos.size();
 }
 
-void EnemySystem::drawEnemies() {
+void EnemySystem::drawEnemies()
+{
     pthread_mutex_lock(&systemMutex);
-    
+
     setColor(12);
-    for (int i = 0; i < (int)enemigos.size(); i++) {
+    for (int i = 0; i < (int)enemigos.size(); i++)
+    {
         gotoxy(enemigos[i].getX(), enemigos[i].getY());
         // Carácter más simple para mejor rendimiento
         cout << "X";
     }
-    
+
     pthread_mutex_unlock(&systemMutex);
 }
 
-bool EnemySystem::checkAnyShotCollisionWithPlayer(int naveX, int naveY) {
+bool EnemySystem::checkAnyShotCollisionWithPlayer(int naveX, int naveY)
+{
     pthread_mutex_lock(&systemMutex);
-    
+
     bool hit = false;
-    for (auto data : threadData) {
-        if (data) {
+    for (auto data : threadData)
+    {
+        if (data)
+        {
             pthread_mutex_lock(&data->shotMutex);
-            
-            for (int i = data->shots.size() - 1; i >= 0; i--) {
-                if (data->shots[i].x == naveX && data->shots[i].y == naveY) {
+
+            for (int i = data->shots.size() - 1; i >= 0; i--)
+            {
+                if (data->shots[i].x == naveX && data->shots[i].y == naveY)
+                {
                     data->shots.erase(data->shots.begin() + i);
                     hit = true;
                     pthread_mutex_unlock(&data->shotMutex);
@@ -859,25 +943,85 @@ bool EnemySystem::checkAnyShotCollisionWithPlayer(int naveX, int naveY) {
                     return true;
                 }
             }
-            
+
             pthread_mutex_unlock(&data->shotMutex);
         }
     }
-    
+
     pthread_mutex_unlock(&systemMutex);
     return hit;
 }
 
-vector<pair<int, int>> EnemySystem::getEnemyPositions() {
+vector<pair<int, int>> EnemySystem::getEnemyPositions()
+{
     pthread_mutex_lock(&systemMutex);
-    
+
     vector<pair<int, int>> positions;
-    for (auto &enemigo : enemigos) {
+    for (auto &enemigo : enemigos)
+    {
         positions.push_back({enemigo.getX(), enemigo.getY()});
     }
-    
+
     pthread_mutex_unlock(&systemMutex);
     return positions;
+}
+
+// Función para verificar colisión de disparos enemigos con el jugador
+bool checkEnemyShotCollision(EnemySystem &enemySystem, int naveX, int naveY, int *vidas)
+{
+    pthread_mutex_lock(&enemySystem.systemMutex);
+
+    for (auto data : enemySystem.threadData)
+    {
+        if (data)
+        {
+            pthread_mutex_lock(&data->shotMutex);
+
+            for (int i = data->shots.size() - 1; i >= 0; i--)
+            {
+                if (data->shots[i].active &&
+                    data->shots[i].x == naveX &&
+                    data->shots[i].y == naveY)
+                {
+
+                    // Eliminar el disparo
+                    data->shots.erase(data->shots.begin() + i);
+                    (*vidas)--;
+
+                    pthread_mutex_unlock(&data->shotMutex);
+                    pthread_mutex_unlock(&enemySystem.systemMutex);
+                    return true;
+                }
+            }
+
+            pthread_mutex_unlock(&data->shotMutex);
+        }
+    }
+
+    pthread_mutex_unlock(&enemySystem.systemMutex);
+    return false;
+}
+
+// Función para mostrar efecto visual cuando se pierde una vida
+void showLifeLostEffect(int naveX, int naveY, int vidasRestantes)
+{
+    setColor(12);
+    gotoxy(naveX, naveY);
+    cout << "*";
+
+    gotoxy(30, 12);
+    cout << "¡IMPACTO!";
+    gotoxy(28, 13);
+    cout << "Vidas restantes: " << vidasRestantes;
+
+    setColor(7);
+    usleep(800000); // 0.8 segundos
+
+    // Limpiar mensajes
+    gotoxy(30, 12);
+    cout << "          ";
+    gotoxy(28, 13);
+    cout << "                    ";
 }
 
 // ---------------- GAME LOOP ----------------
@@ -890,15 +1034,16 @@ void runGame(int enemyCount, int wavesToWin)
     int naveX = 40;
     int naveY = 20;
     int match = 0;
+    int vidas = 3;
 
     vector<pair<int, int>> disparos;
     EnemySystem enemySystem;
 
     // Crear primera oleada de enemigos
-    
+
     pthread_mutex_t playerMutex;
     pthread_mutex_init(&playerMutex, NULL);
-    
+
     PlayerThreadData playerData;
     playerData.naveX = &naveX;
     playerData.naveY = &naveY;
@@ -906,6 +1051,7 @@ void runGame(int enemyCount, int wavesToWin)
     playerData.mutex = &playerMutex;
     playerData.gameRunning = &gameRunning;
     playerData.inGame = &inGame;
+    playerData.score = &score;
     pthread_t playerThreadHandle;
     pthread_create(&playerThreadHandle, NULL, &playerThread, &playerData);
     enemySystem.createEnemies(enemyCount);
@@ -949,7 +1095,7 @@ void runGame(int enemyCount, int wavesToWin)
                 if (match >= wavesToWin)
                 {
                     inGame = false;
-                    pthread_join(playerThreadHandle, NULL);   
+                    pthread_join(playerThreadHandle, NULL);
                     // Victoria
                     setColor(10);
                     gotoxy(30, 12);
@@ -979,24 +1125,63 @@ void runGame(int enemyCount, int wavesToWin)
             // Colisión directa con la nave
             if (enemySystem.checkCollisionWithPlayer(naveX, naveY))
             {
-                inGame = false;
-                pthread_join(playerThreadHandle, NULL);
-                setColor(12);
-                gotoxy(30, 12);
-                cout << "¡COLISIÓN DIRECTA!";
-                gotoxy(35, 14);
-                cout << "GAME OVER";
-                setColor(7);
-                sleep(3);
-                if (score > 0)
+                vidas--;
+                if (vidas <= 0)
                 {
-                    string playerName = getPlayerName();
-                    highScores.push_back({playerName, score});
-                    showScoresScreen();
+                    inGame = false;
+                    pthread_join(playerThreadHandle, NULL);
+                    setColor(12);
+                    gotoxy(30, 12);
+                    cout << "¡COLISIÓN DIRECTA!";
+                    gotoxy(35, 14);
+                    cout << "GAME OVER";
+                    setColor(7);
+                    sleep(3);
+                    if (score > 0)
+                    {
+                        string playerName = getPlayerName();
+                        highScores.push_back({playerName, score});
+                        showScoresScreen();
+                    }
+                    gameRunning = false;
+                    pthread_mutex_destroy(&playerMutex);
+                    continue;
                 }
-                gameRunning = false;
-                pthread_mutex_destroy(&playerMutex);
-                continue;
+                else
+                {
+                    showLifeLostEffect(naveX, naveY, vidas);
+                }
+            }
+
+            // Verificar colisión con disparos enemigos
+            if (checkEnemyShotCollision(enemySystem, naveX, naveY, &vidas))
+            {
+                if (vidas <= 0)
+                {
+                    inGame = false;
+                    pthread_join(playerThreadHandle, NULL);
+                    setColor(12);
+                    gotoxy(30, 12);
+                    cout << "¡SIN VIDAS!";
+                    gotoxy(35, 14);
+                    cout << "GAME OVER";
+                    setColor(7);
+                    sleep(3);
+                    if (score > 0)
+                    {
+                        string playerName = getPlayerName();
+                        highScores.push_back({playerName, score});
+                        showScoresScreen();
+                    }
+                    gameRunning = false;
+                    pthread_mutex_destroy(&playerMutex);
+                    continue;
+                }
+                else
+                {
+                    // Mostrar efecto de pérdida de vida
+                    showLifeLostEffect(naveX, naveY, vidas);
+                }
             }
 
             // Invasión completada
@@ -1033,10 +1218,18 @@ void runGame(int enemyCount, int wavesToWin)
             setColor(14);
             gotoxy(20, 1);
             cout << "GALAGA - PUNTAJE: " << score;
-            
-            setColor(11); 
+
+            setColor(11);
             gotoxy(60, 1);
-            cout << "VIDAS: ♥♥♥";
+            cout << "VIDAS: ";
+            for (int i = 0; i < vidas; i++)
+            {
+                cout << "♥";
+            }
+            for (int i = vidas; i < 3; i++)
+            {
+                cout << "♡";
+            }
 
             setColor(7);
             gotoxy(46, 1);
@@ -1052,7 +1245,6 @@ void runGame(int enemyCount, int wavesToWin)
             }
             pthread_mutex_unlock(&playerMutex);
 
-            
             // Enemigos
             enemySystem.drawEnemies();
             enemySystem.drawAllEnemyShots();
@@ -1073,13 +1265,13 @@ void runGame(int enemyCount, int wavesToWin)
             if (kbhit())
             {
                 int tecla = getchLinux();
-                
+
                 // Teclas de control del juego (manejadas por el hilo principal)
                 if (tecla == 'm' || tecla == 'M')
                 {
                     inGame = false;
                     pthread_join(playerThreadHandle, NULL);
-                    
+
                     if (score > 0)
                     {
                         string playerName = getPlayerName();
