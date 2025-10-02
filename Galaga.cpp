@@ -25,6 +25,15 @@ struct Score
 // Vector global para almacenar puntajes
 vector<Score> highScores;
 
+// Estructura para disparos individuales de cada enemigo
+struct EnemyShot {
+    int x;
+    int y;
+    bool active;
+    
+    EnemyShot(int sx, int sy) : x(sx), y(sy), active(true) {}
+};
+
 // ---------------- FUNCIONES AUXILIARES PARA LINUX ----------------
 
 int getchLinux()
@@ -353,16 +362,37 @@ void showScoresScreen()
 struct EnemySystem;
 
 struct EnemyThreadData {
+    Enemigo* enemigo;
+    int* direccionX;
     EnemySystem* system;
     pthread_mutex_t* mutex;
     int enemyIndex;
     
+    // Disparos del enemigo
+    vector<EnemyShot> shots;
+    pthread_mutex_t shotMutex;
+    
     bool isActive();
+
+    //Constructores
+    EnemyThreadData() {
+        pthread_mutex_init(&shotMutex, NULL);
+    }
+    
+    EnemyThreadData(Enemigo* e, int* dir, EnemySystem* sys, pthread_mutex_t* mtx, int idx) 
+        : enemigo(e), direccionX(dir), system(sys), mutex(mtx), enemyIndex(idx) {
+        pthread_mutex_init(&shotMutex, NULL);
+    }
+    
+
+    ~EnemyThreadData() {
+        pthread_mutex_destroy(&shotMutex);
+    }
 };
 
 struct EnemySystem {
     vector<Enemigo> enemigos;
-    
+    vector<int> direccionX;
     vector<pthread_t> threads;
     vector<bool> threadActive;
     vector<EnemyThreadData*> threadData;
@@ -383,9 +413,11 @@ struct EnemySystem {
     size_t size() const;
     void drawEnemies();
     vector<pair<int, int>> getEnemyPositions();
+    void drawAllEnemyShots();
+    bool checkAnyShotCollisionWithPlayer(int naveX, int naveY);
 };
 
-// Implementación de EnemyThreadData::isActive
+
 bool EnemyThreadData::isActive() {
     return system->isThreadActive(enemyIndex);
 }
@@ -398,12 +430,18 @@ void* enemyThread(void* arg) {
     unsigned int seed = time(NULL) + (unsigned int)data->enemyIndex;
     
     int movementCounter = 0;
+    int shootCounter = 0;
     const int MOVEMENT_INTERVAL = 10; // Moverse cada 5 iteraciones
-    
+    const int SHOOT_INTERVAL = 30; // Disparar cada 30 iteraciones
+    const int SHOT_MOVE_INTERVAL = 2; // Mover disparo cada 2 iteraciones
+    int shotMoveCounter = 0;
+
     while (data->isActive()) {
         usleep(33000); // ~30 FPS (más lento para dar chance al jugador)
         
         movementCounter++;
+        shootCounter++;
+        shotMoveCounter++;
         if (movementCounter >= MOVEMENT_INTERVAL) {
             movementCounter = 0;
             
@@ -447,6 +485,55 @@ void* enemyThread(void* arg) {
             }
             // Si no podemos obtener el mutex, omitimos este movimiento
         }
+
+        if (shotMoveCounter >= SHOT_MOVE_INTERVAL) {
+            shotMoveCounter = 0;
+            pthread_mutex_lock(&data->shotMutex);
+            for (int i = data->shots.size() - 1; i >= 0; i--) {
+                if (data->shots[i].active) {
+                    data->shots[i].y++;
+                    if (data->shots[i].y > 23) {
+                        data->shots[i].active = false;
+                    }
+                }
+            }
+            // Eliminar disparos inactivos
+            data->shots.erase(remove_if(data->shots.begin(), data->shots.end(),
+                                        [](const EnemyShot& s) { return !s.active; }),
+                              data->shots.end());
+            pthread_mutex_unlock(&data->shotMutex);
+        }
+
+        if (shootCounter>= SHOOT_INTERVAL) {
+            shootCounter = 0;
+            // Disparar
+            if(rand_r(&seed) % 100 < 70) { // 70% de probabilidad de disparar
+                if(pthread_mutex_trylock(data->mutex) == 0) {
+                    if (data->system->isThreadActive(data->enemyIndex)) {
+                        int currentX = data->system->enemigos[data->enemyIndex].getX();
+                        int currentY = data->system->enemigos[data->enemyIndex].getY();
+                        pthread_mutex_unlock(data->mutex);
+
+                        if (currentY<23 && currentY>2){
+                            pthread_mutex_unlock(data->mutex);
+
+                            if(data->shots.size() < 5) { // Limitar número de disparos activos
+                                pthread_mutex_lock(&data->shotMutex);
+
+                                if(data->shots.size() < 3){
+                                    data->shots.emplace_back(currentX, currentY + 1);
+                                }
+                                pthread_mutex_unlock(&data->shotMutex);
+                            }
+
+
+                        }
+                    } else {
+                        pthread_mutex_unlock(data->mutex);
+                    }
+                }
+            }
+        }
     }
     
     return NULL;
@@ -459,6 +546,8 @@ EnemySystem::EnemySystem() {
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
     pthread_mutex_init(&systemMutex, &attr);
     pthread_mutexattr_destroy(&attr);
+    drawAllEnemyShots();
+    checkAnyShotCollisionWithPlayer(0, 0);
 }
 
 EnemySystem::~EnemySystem() {
@@ -524,6 +613,8 @@ void EnemySystem::createEnemies(int num) {
         threads.push_back(0);
         
         EnemyThreadData* data = new EnemyThreadData{
+            &enemigos.back(),
+            &direccionX.emplace_back(1),
             this,
             &systemMutex,
             i
@@ -559,6 +650,30 @@ void EnemySystem::createEnemies(int num) {
         }
     }
 }
+
+// Dibujar todos los disparos enemigos
+void EnemySystem::drawAllEnemyShots() {
+    pthread_mutex_lock(&systemMutex);
+    
+    setColor(12); // Rojo brillante
+    for (auto data : threadData) {
+        if (data) {
+            pthread_mutex_lock(&data->shotMutex);
+            
+            for (auto &shot : data->shots) {
+                if (shot.active) {
+                    gotoxy(shot.x, shot.y);
+                    cout << "v";
+                }
+            }
+            
+            pthread_mutex_unlock(&data->shotMutex);
+        }
+    }
+    
+    pthread_mutex_unlock(&systemMutex);
+}
+
 bool EnemySystem::checkCollisionWithPlayer(int naveX, int naveY) {
     pthread_mutex_lock(&systemMutex);
     
@@ -659,6 +774,32 @@ void EnemySystem::drawEnemies() {
     }
     
     pthread_mutex_unlock(&systemMutex);
+}
+
+bool EnemySystem::checkAnyShotCollisionWithPlayer(int naveX, int naveY) {
+    pthread_mutex_lock(&systemMutex);
+    
+    bool hit = false;
+    for (auto data : threadData) {
+        if (data) {
+            pthread_mutex_lock(&data->shotMutex);
+            
+            for (int i = data->shots.size() - 1; i >= 0; i--) {
+                if (data->shots[i].x == naveX && data->shots[i].y == naveY) {
+                    data->shots.erase(data->shots.begin() + i);
+                    hit = true;
+                    pthread_mutex_unlock(&data->shotMutex);
+                    pthread_mutex_unlock(&systemMutex);
+                    return true;
+                }
+            }
+            
+            pthread_mutex_unlock(&data->shotMutex);
+        }
+    }
+    
+    pthread_mutex_unlock(&systemMutex);
+    return hit;
 }
 
 vector<pair<int, int>> EnemySystem::getEnemyPositions() {
@@ -794,18 +935,20 @@ void runGame(int enemyCount, int wavesToWin)
             clearScreen();
             drawFrame();
 
-            setColor(15);
-            gotoxy(25, 1);
-            cout << "GALAGA - PUNTAJE: " << score;
             setColor(14);
-            gotoxy(2, 1);
+            gotoxy(5, 1);
             cout << "ENEMIGOS: " << enemySystem.size();
-            setColor(13);
+
+            setColor(14);
+            gotoxy(20, 1);
+            cout << "GALAGA - PUNTAJE: " << score;
+            
+            setColor(11); 
             gotoxy(60, 1);
-            cout << "DISPAROS: " << disparos.size();
-            gotoxy(50, 1);
             cout << "VIDAS: ♥♥♥";
-            gotoxy(35, 1);
+
+            setColor(7);
+            gotoxy(46, 1);
             cout << "OLEADA: " << (match + 1) << "/" << wavesToWin;
 
             // Disparos
@@ -816,8 +959,10 @@ void runGame(int enemyCount, int wavesToWin)
                 cout << "|";
             }
 
+            
             // Enemigos
             enemySystem.drawEnemies();
+            enemySystem.drawAllEnemyShots();
 
             // Nave
             setColor(10);
@@ -826,7 +971,7 @@ void runGame(int enemyCount, int wavesToWin)
 
             // Instrucciones
             setColor(11);
-            gotoxy(2, 22);
+            gotoxy(7, 22);
             cout << "A/D: Mover - ESPACIO: Disparar - M: Terminar - Q: Salir - P: Pausa";
 
             // Controles
@@ -963,7 +1108,7 @@ void gameScreen()
     switch (gameMode)
     {
     case '1':
-        enemyCount = 1;
+        enemyCount = 5;
         wavesToWin = 1; // proof
         break;
     case '2':
