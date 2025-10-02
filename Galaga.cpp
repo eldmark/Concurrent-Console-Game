@@ -34,6 +34,29 @@ struct EnemyShot {
     EnemyShot(int sx, int sy) : x(sx), y(sy), active(true) {}
 };
 
+struct PlayerThreadData {
+    int* naveX;
+    int* naveY;
+    vector<pair<int, int>>* disparos;
+    pthread_mutex_t* mutex;
+    bool* gameRunning;
+    bool* inGame;
+    int* score;
+    char lastKey;
+    bool hasNewKey;
+    pthread_mutex_t keyMutex;
+    
+    PlayerThreadData() {
+        pthread_mutex_init(&keyMutex, NULL);
+        lastKey = 0;
+        hasNewKey = false;
+    }
+    
+    ~PlayerThreadData() {
+        pthread_mutex_destroy(&keyMutex);
+    }
+};
+
 // ---------------- FUNCIONES AUXILIARES PARA LINUX ----------------
 
 int getchLinux()
@@ -539,6 +562,49 @@ void* enemyThread(void* arg) {
     return NULL;
 }
 
+// ============= HILO DEL JUGADOR =============
+void* playerThread(void* arg) {
+    PlayerThreadData* data = static_cast<PlayerThreadData*>(arg);
+    
+    while (*(data->gameRunning) && *(data->inGame)) {
+        usleep(16000); // ~60 FPS
+        
+        // Verificar si hay tecla presionada
+        pthread_mutex_lock(&data->keyMutex);
+        if (data->hasNewKey) {
+            char tecla = data->lastKey;
+            data->hasNewKey = false;
+            pthread_mutex_unlock(&data->keyMutex);
+            
+            // Procesar la tecla
+            pthread_mutex_lock(data->mutex);
+            
+            switch (tecla) {
+                case 'a':
+                case 'A':
+                    if (*(data->naveX) > 2)
+                        (*(data->naveX))--;
+                    break;
+                case 'd':
+                case 'D':
+                    if (*(data->naveX) < 77)
+                        (*(data->naveX))++;
+                    break;
+                case ' ':
+                    if (data->disparos->size() < 5)
+                        data->disparos->push_back({*(data->naveX), *(data->naveY) - 1});
+                    break;
+            }
+            
+            pthread_mutex_unlock(data->mutex);
+        } else {
+            pthread_mutex_unlock(&data->keyMutex);
+        }
+    }
+    
+    return NULL;
+}
+
 // Implementaciones de EnemySystem MEJORADAS
 EnemySystem::EnemySystem() {
     pthread_mutexattr_t attr;
@@ -829,6 +895,19 @@ void runGame(int enemyCount, int wavesToWin)
     EnemySystem enemySystem;
 
     // Crear primera oleada de enemigos
+    
+    pthread_mutex_t playerMutex;
+    pthread_mutex_init(&playerMutex, NULL);
+    
+    PlayerThreadData playerData;
+    playerData.naveX = &naveX;
+    playerData.naveY = &naveY;
+    playerData.disparos = &disparos;
+    playerData.mutex = &playerMutex;
+    playerData.gameRunning = &gameRunning;
+    playerData.inGame = &inGame;
+    pthread_t playerThreadHandle;
+    pthread_create(&playerThreadHandle, NULL, &playerThread, &playerData);
     enemySystem.createEnemies(enemyCount);
 
     while (gameRunning)
@@ -836,15 +915,18 @@ void runGame(int enemyCount, int wavesToWin)
         if (inGame)
         {
             // Mover disparos
+            pthread_mutex_lock(&playerMutex);
             for (int i = disparos.size() - 1; i >= 0; i--)
             {
                 disparos[i].second--;
                 if (disparos[i].second < 2)
                     disparos.erase(disparos.begin() + i);
             }
+            pthread_mutex_unlock(&playerMutex);
 
             // Colisiones disparos - enemigos
             vector<pair<int, int>> enemyPositions = enemySystem.getEnemyPositions();
+            pthread_mutex_lock(&playerMutex);
             for (int i = disparos.size() - 1; i >= 0; i--)
             {
                 for (int j = enemyPositions.size() - 1; j >= 0; j--)
@@ -859,13 +941,15 @@ void runGame(int enemyCount, int wavesToWin)
                     }
                 }
             }
-
+            pthread_mutex_unlock(&playerMutex);
             // Generar nueva oleada si no quedan enemigos
             if (enemySystem.size() == 0)
             {
                 match++;
                 if (match >= wavesToWin)
                 {
+                    inGame = false;
+                    pthread_join(playerThreadHandle, NULL);   
                     // Victoria
                     setColor(10);
                     gotoxy(30, 12);
@@ -882,6 +966,7 @@ void runGame(int enemyCount, int wavesToWin)
                     highScores.push_back({playerName, score});
                     showScoresScreen();
                     gameRunning = false;
+                    pthread_mutex_destroy(&playerMutex);
                     continue;
                 }
                 else
@@ -894,6 +979,8 @@ void runGame(int enemyCount, int wavesToWin)
             // Colisión directa con la nave
             if (enemySystem.checkCollisionWithPlayer(naveX, naveY))
             {
+                inGame = false;
+                pthread_join(playerThreadHandle, NULL);
                 setColor(12);
                 gotoxy(30, 12);
                 cout << "¡COLISIÓN DIRECTA!";
@@ -908,12 +995,15 @@ void runGame(int enemyCount, int wavesToWin)
                     showScoresScreen();
                 }
                 gameRunning = false;
+                pthread_mutex_destroy(&playerMutex);
                 continue;
             }
 
             // Invasión completada
             if (enemySystem.checkInvasion())
             {
+                inGame = false;
+                pthread_join(playerThreadHandle, NULL);
                 setColor(12);
                 gotoxy(28, 12);
                 cout << "¡INVASIÓN COMPLETADA!";
@@ -928,6 +1018,7 @@ void runGame(int enemyCount, int wavesToWin)
                     showScoresScreen();
                 }
                 gameRunning = false;
+                pthread_mutex_destroy(&playerMutex);
                 continue;
             }
 
@@ -952,12 +1043,14 @@ void runGame(int enemyCount, int wavesToWin)
             cout << "OLEADA: " << (match + 1) << "/" << wavesToWin;
 
             // Disparos
+            pthread_mutex_lock(&playerMutex);
             setColor(11);
             for (auto &d : disparos)
             {
                 gotoxy(d.first, d.second);
                 cout << "|";
             }
+            pthread_mutex_unlock(&playerMutex);
 
             
             // Enemigos
@@ -965,9 +1058,11 @@ void runGame(int enemyCount, int wavesToWin)
             enemySystem.drawAllEnemyShots();
 
             // Nave
+            pthread_mutex_lock(&playerMutex);
             setColor(10);
             gotoxy(naveX, naveY);
             cout << "A";
+            pthread_mutex_unlock(&playerMutex);
 
             // Instrucciones
             setColor(11);
@@ -978,24 +1073,13 @@ void runGame(int enemyCount, int wavesToWin)
             if (kbhit())
             {
                 int tecla = getchLinux();
-                switch (tecla)
+                
+                // Teclas de control del juego (manejadas por el hilo principal)
+                if (tecla == 'm' || tecla == 'M')
                 {
-                case 'a':
-                case 'A':
-                    if (naveX > 2)
-                        naveX--;
-                    break;
-                case 'd':
-                case 'D':
-                    if (naveX < 77)
-                        naveX++;
-                    break;
-                case ' ':
-                    if (disparos.size() < 5)
-                        disparos.push_back({naveX, naveY - 1});
-                    break;
-                case 'm':
-                case 'M':
+                    inGame = false;
+                    pthread_join(playerThreadHandle, NULL);
+                    
                     if (score > 0)
                     {
                         string playerName = getPlayerName();
@@ -1003,15 +1087,26 @@ void runGame(int enemyCount, int wavesToWin)
                         showScoresScreen();
                     }
                     gameRunning = false;
-                    break;
-                case 'q':
-                case 'Q':
-                    gameRunning = false;
-                    break;
-                case 'p':
-                case 'P':
+                    pthread_mutex_destroy(&playerMutex);
+                }
+                else if (tecla == 'q' || tecla == 'Q')
+                {
                     inGame = false;
-                    break;
+                    pthread_join(playerThreadHandle, NULL);
+                    gameRunning = false;
+                    pthread_mutex_destroy(&playerMutex);
+                }
+                else if (tecla == 'p' || tecla == 'P')
+                {
+                    inGame = false;
+                    pthread_join(playerThreadHandle, NULL);
+                }
+                else
+                {
+                    pthread_mutex_lock(&playerData.keyMutex);
+                    playerData.lastKey = tecla;
+                    playerData.hasNewKey = true;
+                    pthread_mutex_unlock(&playerData.keyMutex);
                 }
             }
         }
@@ -1039,13 +1134,14 @@ void runGame(int enemyCount, int wavesToWin)
             if (kbhit())
             {
                 int tecla = getchLinux();
-                switch (tecla)
+                if (tecla == ' ')
                 {
-                case ' ':
                     inGame = true;
-                    break;
-                case 'm':
-                case 'M':
+
+                    pthread_create(&playerThreadHandle, NULL, &playerThread, &playerData);
+                }
+                else if (tecla == 'm' || tecla == 'M')
+                {
                     if (score > 0)
                     {
                         string playerName = getPlayerName();
@@ -1053,11 +1149,12 @@ void runGame(int enemyCount, int wavesToWin)
                         showScoresScreen();
                     }
                     gameRunning = false;
-                    break;
-                case 'q':
-                case 'Q':
+                    pthread_mutex_destroy(&playerMutex);
+                }
+                else if (tecla == 'q' || tecla == 'Q')
+                {
                     gameRunning = false;
-                    break;
+                    pthread_mutex_destroy(&playerMutex);
                 }
             }
         }
