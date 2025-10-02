@@ -1187,6 +1187,7 @@ void runGame(int enemyCount, int wavesToWin)
             // Invasión completada
             if (enemySystem.checkInvasion())
             {
+                vidas = 0; // Invasión = pérdida automática
                 inGame = false;
                 pthread_join(playerThreadHandle, NULL);
                 setColor(12);
