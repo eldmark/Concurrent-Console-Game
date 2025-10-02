@@ -353,8 +353,6 @@ void showScoresScreen()
 struct EnemySystem;
 
 struct EnemyThreadData {
-    Enemigo* enemigo;
-    int* direccionX;
     EnemySystem* system;
     pthread_mutex_t* mutex;
     int enemyIndex;
@@ -364,7 +362,6 @@ struct EnemyThreadData {
 
 struct EnemySystem {
     vector<Enemigo> enemigos;
-    vector<int> direccionesX;
     
     vector<pthread_t> threads;
     vector<bool> threadActive;
@@ -401,7 +398,7 @@ void* enemyThread(void* arg) {
     unsigned int seed = time(NULL) + (unsigned int)data->enemyIndex;
     
     int movementCounter = 0;
-    const int MOVEMENT_INTERVAL = 5; // Moverse cada 5 iteraciones
+    const int MOVEMENT_INTERVAL = 10; // Moverse cada 5 iteraciones
     
     while (data->isActive()) {
         usleep(33000); // ~30 FPS (más lento para dar chance al jugador)
@@ -411,33 +408,41 @@ void* enemyThread(void* arg) {
             movementCounter = 0;
             
             // Intentar obtener el mutex sin bloquear
-            if (pthread_mutex_trylock(data->mutex) == 0) {
-                int currentX = data->enemigo->getX();
-                int currentY = data->enemigo->getY();
+            if(pthread_mutex_trylock(data->mutex) == 0) {
+                // Verificar de nuevo si todavía activo después de obtener el lock
+                if (!data->system->isThreadActive(data->enemyIndex)) {
+                    pthread_mutex_unlock(data->mutex);
+                    break;
+                }
+
+                Enemigo& enemigo = data->system->enemigos[data->enemyIndex];
+                int currentX = enemigo.getX();
+                int currentY = enemigo.getY();
                 
                 // Movimiento más simple y predecible
-                int movimiento = rand_r(&seed) % 8; // 0-7
+                int movimiento = rand_r(&seed) % 7; // 0-7
                 
                 switch (movimiento) {
-                    case 0: 
+                    case 0:
+                        
                     case 1: // Izquierda (25% probabilidad)
-                        if (currentX > 3) data->enemigo->moveLeft(1); 
+                        if (currentX > 3) enemigo.moveLeft(1); 
                         break;
                     case 2: 
+                        
                     case 3: // Derecha (25% probabilidad)
-                        if (currentX < 75) data->enemigo->moveRight(1); 
+                        if (currentX < 75) enemigo.moveRight(1); 
                         break;
                     case 4: 
+                        
                     case 5: // Abajo (25% probabilidad)
-                        if (currentY < 22) data->enemigo->moveDown(1); 
+                        if (currentY < 22) enemigo.moveDown(1); 
                         break;
                     case 6: // Arriba (12.5% probabilidad)
-                        if (currentY > 2) data->enemigo->moveDown(-1); 
+                        if (currentY > 2) enemigo.moveUp(1); 
                         break;
-                    case 7: // No moverse (12.5% probabilidad)
-                        break;
+
                 }
-                
                 pthread_mutex_unlock(data->mutex);
             }
             // Si no podemos obtener el mutex, omitimos este movimiento
@@ -449,7 +454,11 @@ void* enemyThread(void* arg) {
 
 // Implementaciones de EnemySystem MEJORADAS
 EnemySystem::EnemySystem() {
-    pthread_mutex_init(&systemMutex, NULL);
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+    pthread_mutex_init(&systemMutex, &attr);
+    pthread_mutexattr_destroy(&attr);
 }
 
 EnemySystem::~EnemySystem() {
@@ -460,28 +469,13 @@ EnemySystem::~EnemySystem() {
 void EnemySystem::cleanup() {
     // Detener todos los hilos
     for (size_t i = 0; i < threadActive.size(); i++) {
-        threadActive[i] = false;
+        setThreadActive(i, false);
     }
     
-    // Esperar a que los hilos terminen (máximo 2 segundos)
-    time_t startTime = time(NULL);
+    // Esperar a que los hilos terminen
     for (size_t i = 0; i < threads.size(); i++) {
         if (threads[i] != 0) {
-            int attempts = 0;
-            while (attempts < 20) { // 20 intentos de 100ms = 2 segundos
-                void* result;
-                if (pthread_tryjoin_np(threads[i], &result) == 0) {
-                    break; // Hilo terminado
-                }
-                usleep(100000); // 100ms
-                attempts++;
-                
-                // Timeout después de 2 segundos
-                if (time(NULL) - startTime > 2) {
-                    pthread_cancel(threads[i]);
-                    break;
-                }
-            }
+            pthread_join(threads[i], NULL);
         }
     }
     
@@ -497,22 +491,23 @@ void EnemySystem::cleanup() {
     threadActive.clear();
     threadData.clear();
     enemigos.clear();
-    direccionesX.clear();
     
     pthread_mutex_unlock(&systemMutex);
 }
 
 bool EnemySystem::isThreadActive(int index) {
-    if (index < 0 || index >= (int)threadActive.size()) {
-        return false;
-    }
-    return threadActive[index];
+    pthread_mutex_lock(&systemMutex);
+    bool ret = (index >= 0 && index < (int)threadActive.size()) && threadActive[index];
+    pthread_mutex_unlock(&systemMutex);
+    return ret;
 }
 
 void EnemySystem::setThreadActive(int index, bool value) {
+    pthread_mutex_lock(&systemMutex);
     if (index >= 0 && index < (int)threadActive.size()) {
         threadActive[index] = value;
     }
+    pthread_mutex_unlock(&systemMutex);
 }
 
 void EnemySystem::createEnemies(int num) {
@@ -525,14 +520,10 @@ void EnemySystem::createEnemies(int num) {
     
     for (int i = 0; i < num; i++) {
         enemigos.emplace_back(i * 8 + 10, 3 + (i % 3));
-        direccionesX.push_back((i % 2 == 0) ? 1 : -1);
-        
         threadActive.push_back(true);
         threads.push_back(0);
         
         EnemyThreadData* data = new EnemyThreadData{
-            &enemigos.back(),
-            &direccionesX.back(),
             this,
             &systemMutex,
             i
@@ -542,15 +533,32 @@ void EnemySystem::createEnemies(int num) {
     
     pthread_mutex_unlock(&systemMutex);
     
-    // Crear hilos
+    // Crear hilos con verificación de error mejorada
     for (int i = 0; i < num; i++) {
         if (pthread_create(&threads[i], NULL, &enemyThread, threadData[i]) != 0) {
             cerr << "Error creando hilo para enemigo " << i << endl;
             setThreadActive(i, false);
+            
+            // Si falla la creación del hilo, eliminar el enemigo correspondiente
+            pthread_mutex_lock(&systemMutex);
+            if (i < (int)enemigos.size()) {
+                enemigos.erase(enemigos.begin() + i);
+                delete threadData[i];
+                threadData.erase(threadData.begin() + i);
+                threadActive.erase(threadActive.begin() + i);
+                threads.erase(threads.begin() + i);
+            }
+            pthread_mutex_unlock(&systemMutex);
+            
+            // Reindexar los elementos restantes
+            for (int j = i; j < (int)threadData.size(); j++) {
+                if (threadData[j]) {
+                    threadData[j]->enemyIndex = j;
+                }
+            }
         }
     }
 }
-
 bool EnemySystem::checkCollisionWithPlayer(int naveX, int naveY) {
     pthread_mutex_lock(&systemMutex);
     
@@ -587,17 +595,16 @@ void EnemySystem::removeEnemy(int index) {
     // Detener el hilo PRIMERO
     setThreadActive(index, false);
     
-    // Esperar un poco para que el hilo se detenga
-    usleep(50000); // 50ms
+    // Unir al hilo para esperar a que termine completamente
+    if (index < (int)threads.size() && threads[index] != 0) {
+        pthread_join(threads[index], NULL);
+    }
     
     pthread_mutex_lock(&systemMutex);
     
     // Eliminar elementos
     if (index < (int)enemigos.size()) {
         enemigos.erase(enemigos.begin() + index);
-    }
-    if (index < (int)direccionesX.size()) {
-        direccionesX.erase(direccionesX.begin() + index);
     }
     
     // Reindexar los threadData restantes
