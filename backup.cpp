@@ -27,6 +27,7 @@ vector<Score> highScores;
 
 // ---------------- FUNCIONES AUXILIARES PARA LINUX ----------------
 
+// Leer una tecla sin esperar a Enter
 int getchLinux()
 {
     struct termios oldt, newt;
@@ -39,7 +40,7 @@ int getchLinux()
     tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
     return ch;
 }
-
+// Detectar si una tecla ha sido presionada
 int kbhit()
 {
     termios oldt, newt;
@@ -124,7 +125,7 @@ void drawControlIcons()
     gotoxy(5, 15);
     cout << "│     D       │";
     gotoxy(5, 16);
-    cout << "└─────────────┘"; // Icono disparar
+    cout << "└─────────────┘"; 
     gotoxy(59, 8);
     cout << "┌──────────────┐";
     gotoxy(59, 9);
@@ -135,7 +136,7 @@ void drawControlIcons()
     cout << "│   [ESPACIO]  │";
     gotoxy(59, 12);
 
-    cout << "└──────────────┘"; // Nave del jugador
+    cout << "└──────────────┘"; 
     setColor(11);
 
     gotoxy(60, 13);
@@ -285,7 +286,7 @@ string getPlayerName(bool isVictory = false)
             cout << c;
         }
     }
-
+    // esconder el cursor nuevamente
     hideCursor();
 
     if (name.empty())
@@ -351,7 +352,7 @@ void showScoresScreen()
 
 // Declaración forward
 struct EnemySystem;
-
+// Datos para cada hilo de enemigo (estructura)
 struct EnemyThreadData {
     EnemySystem* system;
     pthread_mutex_t* mutex;
@@ -359,7 +360,7 @@ struct EnemyThreadData {
     
     bool isActive();
 };
-
+// Estructura para manejar múltiples enemigos y sus hilos de manera segura
 struct EnemySystem {
     vector<Enemigo> enemigos;
     
@@ -371,7 +372,7 @@ struct EnemySystem {
     // Constructor y destructor
     EnemySystem();
     ~EnemySystem();
-    
+    // Este orden es necesario para poder evitar fugas de memoria y hilos congelados
     void cleanup();
     bool isThreadActive(int index);
     void setThreadActive(int index, bool value);
@@ -711,7 +712,7 @@ void runGame(int enemyCount, int wavesToWin)
                     if (disparos[i].first == enemyPositions[j].first &&
                         disparos[i].second == enemyPositions[j].second)
                     {
-                        score += 200;
+                        score += 10;
                         disparos.erase(disparos.begin() + i);
                         enemySystem.removeEnemyByPosition(enemyPositions[j].first, enemyPositions[j].second);
                         break;

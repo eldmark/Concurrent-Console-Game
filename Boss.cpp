@@ -7,7 +7,7 @@
 
 extern void gotoxy(int x, int y);
 extern void setColor(int color);
-
+// Constructor
 Boss::Boss(int startX, int startY, int hp, BossType bossType) 
     : xpos(startX), ypos(startY), health(hp), maxHealth(hp), 
       isActive(true), attackReady(false), attackType(0), type(bossType) {
@@ -15,7 +15,7 @@ Boss::Boss(int startX, int startY, int hp, BossType bossType)
     pthread_cond_init(&attackSignal, NULL);
     pthread_mutex_init(&shotMutex, NULL);
 }
-
+// Destructor
 Boss::~Boss() {
     for (auto escort : escorts) {
         delete escort;
@@ -25,7 +25,7 @@ Boss::~Boss() {
     pthread_cond_destroy(&attackSignal);
     pthread_mutex_destroy(&shotMutex);
 }
-
+// controles de movimiento
 void Boss::moveDown(int pasos) {
     ypos += pasos;
     if (ypos > 18) ypos = 18;
@@ -49,7 +49,7 @@ void Boss::moveRight(int pasos) {
     if (xpos > 71) xpos = 71;
     updateEscortPositions();
 }
-
+// dibujar cada tipo de jefe
 void Boss::draw() {
     if (!isActive) return;
     
@@ -84,7 +84,7 @@ void Boss::draw() {
             break;
     }
 }
-
+// barra de vida
 void Boss::drawHealthBar() {
     if (!isActive) return;
     
@@ -123,7 +123,7 @@ void Boss::drawEscorts() {
         }
     }
 }
-
+// dibujar disparos del jefe y escoltas
 void Boss::drawAllShots() {
     setColor(12);
     
@@ -149,7 +149,7 @@ void Boss::drawAllShots() {
         }
     }
 }
-
+// controlar daño y destrucción
 void Boss::takeDamage(int damage) {
     pthread_mutex_lock(&bossMutex);
     health -= damage;
@@ -160,14 +160,14 @@ void Boss::takeDamage(int damage) {
     }
     pthread_mutex_unlock(&bossMutex);
 }
-
+// destruir jefe
 void Boss::destroy() {
     pthread_mutex_lock(&bossMutex);
     isActive = false;
     pthread_cond_broadcast(&attackSignal);
     pthread_mutex_unlock(&bossMutex);
 }
-
+// sistema de escoltas
 void Boss::createEscorts(int count) {
     switch (type) {
         case BOSS_TYPE_1:
@@ -201,7 +201,7 @@ void Boss::createEscorts(int count) {
             break;
     }
 }
-
+//  actualizar posiciones de escoltas
 void Boss::updateEscortPositions() {
     for (auto escort : escorts) {
         if (escort->isAlive) {
@@ -230,7 +230,7 @@ void Boss::updateEscortPositions() {
         }
     }
 }
-
+// contar escoltas vivas
 int Boss::getAliveEscortsCount() const {
     int count = 0;
     for (auto escort : escorts) {
@@ -249,7 +249,7 @@ bool Boss::checkEscortCollision(int x, int y) {
     }
     return false;
 }
-
+// eliminar escolta en posición específica
 void Boss::removeEscortAt(int x, int y) {
     for (auto escort : escorts) {
         if (escort->isAlive && 
@@ -260,7 +260,7 @@ void Boss::removeEscortAt(int x, int y) {
         }
     }
 }
-
+// colisiones mejoradas según tipo de jefe
 bool Boss::checkBossCollision(int x, int y) {
     if (!isActive) return false;
     
@@ -300,7 +300,7 @@ void Boss::signalAttack(int type) {
     pthread_cond_broadcast(&attackSignal);
     pthread_mutex_unlock(&bossMutex);
 }
-
+// esperar señal de ataque
 void Boss::waitForAttackSignal() {
     pthread_mutex_lock(&bossMutex);
     while (!attackReady && isActive) { //No tocar
@@ -308,7 +308,7 @@ void Boss::waitForAttackSignal() {
     }
     pthread_mutex_unlock(&bossMutex);
 }
-
+// limpiar señal de ataque
 void Boss::clearAttackSignal() {
     pthread_mutex_lock(&bossMutex);
     attackReady = false;
@@ -324,7 +324,7 @@ void Boss::shootBoss() {
     }
     pthread_mutex_unlock(&shotMutex);
 }
-
+// disparar escolta específica
 void Boss::shootEscort(int escortIndex) {
     if (escortIndex < 0 || escortIndex >= (int)escorts.size()) return;
     if (!escorts[escortIndex]->isAlive) return;
@@ -339,7 +339,7 @@ void Boss::shootEscort(int escortIndex) {
     }
     pthread_mutex_unlock(&escort->shotMutex);
 }
-
+// actualizar disparos del jefe y escoltas
 void Boss::updateShots() {
     pthread_mutex_lock(&shotMutex);
     for (int i = bossShots.size() - 1; i >= 0; i--) {
@@ -356,7 +356,7 @@ void Boss::updateShots() {
         bossShots.end()
     );
     pthread_mutex_unlock(&shotMutex);
-    
+    // actualizar disparos de escoltas
     for (auto escort : escorts) {
         if (escort->isAlive) {
             pthread_mutex_lock(&escort->shotMutex);
@@ -377,7 +377,7 @@ void Boss::updateShots() {
         }
     }
 }
-
+// verificar colisiones de disparos
 bool Boss::checkShotCollision(int x, int y) {
     pthread_mutex_lock(&shotMutex);
     for (int i = bossShots.size() - 1; i >= 0; i--) {
@@ -409,7 +409,7 @@ bool Boss::checkShotCollision(int x, int y) {
     
     return false;
 }
-
+// Hilos para jefe y escoltas
 void* bossThread(void* arg) {
     BossThreadData* data = static_cast<BossThreadData*>(arg);
     Boss* boss = data->boss;
@@ -429,7 +429,7 @@ void* bossThread(void* arg) {
         movementCounter++;
         attackCounter++;
         shotUpdateCounter++;
-        
+        // Movimiento aleatorio del jefe
         if (movementCounter >= MOVEMENT_INTERVAL) {
             movementCounter = 0;
             
@@ -450,7 +450,7 @@ void* bossThread(void* arg) {
             shotUpdateCounter = 0;
             boss->updateShots();
         }
-        
+        // Ataque coordinado
         if (attackCounter >= ATTACK_INTERVAL) {
             attackCounter = 0;
             
@@ -465,7 +465,7 @@ void* bossThread(void* arg) {
     
     return NULL;
 }
-
+// Hilo para escoltas
 void* escortThread(void* arg) {
     EscortThreadData* data = static_cast<EscortThreadData*>(arg);
     Boss* boss = data->boss;
