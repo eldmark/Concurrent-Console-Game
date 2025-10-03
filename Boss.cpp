@@ -239,6 +239,7 @@ int Boss::getAliveEscortsCount() const {
     return count;
 }
 
+//Corroborar la colisión con escoltas
 bool Boss::checkEscortCollision(int x, int y) {
     for (auto escort : escorts) {
         if (escort->isAlive && 
@@ -293,6 +294,7 @@ bool Boss::checkBossCollision(int x, int y) {
     return false;
 }
 
+//Enviar señal a los escoltas para atacasr
 void Boss::signalAttack(int type) {
     pthread_mutex_lock(&bossMutex);
     attackType = type;
@@ -315,6 +317,7 @@ void Boss::clearAttackSignal() {
     pthread_mutex_unlock(&bossMutex);
 }
 
+// sistema de disparo del jefe
 void Boss::shootBoss() {
     if (!isActive) return;
     
@@ -324,6 +327,7 @@ void Boss::shootBoss() {
     }
     pthread_mutex_unlock(&shotMutex);
 }
+
 // disparar escolta específica
 void Boss::shootEscort(int escortIndex) {
     if (escortIndex < 0 || escortIndex >= (int)escorts.size()) return;

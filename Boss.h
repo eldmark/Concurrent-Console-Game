@@ -80,7 +80,7 @@ public:
     void draw();
     void drawEscorts();
     void drawAllShots();
-    void drawHealthBar();  // Nueva función para barra de vida
+    void drawHealthBar();
     
     // Getters
     int getX() const { return xpos; }
@@ -123,12 +123,14 @@ public:
 };
 
 // Estructura de datos para hilos
+//Hilo de jefe
 struct BossThreadData {
     Boss* boss;
     bool* gameRunning;
     pthread_mutex_t* gameMutex;
 };
 
+//Hilo de escolta
 struct EscortThreadData {
     Boss* boss;
     int escortIndex;

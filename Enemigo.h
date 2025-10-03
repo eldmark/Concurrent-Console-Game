@@ -5,11 +5,13 @@
 #include "Pantalla.h"
 
 
+//Clase enemigo
 class Enemigo {
 private:
     int xpos;
     int ypos;
 
+//Metodos de la clase enemigo para manejjar movimiento y dibujo
 public:
     Enemigo(int startX, int startY);
     void moveDown(int limite);

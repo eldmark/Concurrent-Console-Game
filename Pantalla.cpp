@@ -13,19 +13,23 @@ Pantalla::~Pantalla() {
     endwin(); // cerrar ncurses
 }
 
+// Limpiar pantalla
 void Pantalla::limpiar() {
     clear();
 }
 
+// Dibujar caracter en posición (x, y)
 void Pantalla::dibujar(int x, int y, char c) {
     if (x >= 0 && x < ancho && y >= 0 && y < alto) {
         mvaddch(y, x, c);
     }
 }
 
+// Refrescar pantalla
 void Pantalla::mostrar() {
     refresh();
 }
 
+//Getters
 int Pantalla::getAncho() const { return ancho; }
 int Pantalla::getAlto() const { return alto; }

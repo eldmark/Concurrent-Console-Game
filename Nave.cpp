@@ -1,5 +1,6 @@
 #include "Nave.h"
 
+//Métodos de la clase nave para manejar movimiento y dibujo
 Nave::Nave(int startX, int startY) : x(startX), y(startY) {}
 
 void Nave::moverIzquierda() {
