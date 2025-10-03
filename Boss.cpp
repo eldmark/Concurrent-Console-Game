@@ -62,7 +62,7 @@ void Boss::draw() {
             gotoxy(xpos - 2, ypos);
             std::cout << "|• •|";
             gotoxy(xpos - 2, ypos + 1);
-            std::cout << " \_/ ";
+            std::cout << " \\_/ ";
             break;
             
         case BOSS_TYPE_2:
