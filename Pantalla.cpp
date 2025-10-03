@@ -1,5 +1,18 @@
 #include "Pantalla.h"
 
+/*
+Universidad del Valle de Guatemala
+Facultad de Ingeniera
+Curso: Programación de Microprocesadores
+Proyecto Final: Galaga 
+Autores:
+    - Marcelo Detlefsen 24553
+    - Alejandro Jerez 24678
+    - Julián Divas 24687
+    - Marco Díaz 24229
+
+*/
+
 Pantalla::Pantalla(int w, int h) : ancho(w), alto(h) {
     initscr();            // iniciar ncurses
     noecho();             // no mostrar las teclas

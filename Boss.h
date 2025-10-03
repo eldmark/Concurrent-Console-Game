@@ -6,6 +6,19 @@
 #include "Enemigo.h"
 #include "Pantalla.h"
 
+/*
+Universidad del Valle de Guatemala
+Facultad de Ingeniera
+Curso: Programación de Microprocesadores
+Proyecto Final: Galaga 
+Autores:
+    - Marcelo Detlefsen 24553
+    - Alejandro Jerez 24678
+    - Julián Divas 24687
+    - Marco Díaz 24229
+
+*/
+
 // Tipos de jefes
 enum BossType {
     BOSS_TYPE_1 = 1,  // Jefe básico

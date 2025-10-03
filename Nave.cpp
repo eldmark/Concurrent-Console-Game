@@ -1,5 +1,18 @@
 #include "Nave.h"
 
+/*
+Universidad del Valle de Guatemala
+Facultad de Ingeniera
+Curso: Programación de Microprocesadores
+Proyecto Final: Galaga 
+Autores:
+    - Marcelo Detlefsen 24553
+    - Alejandro Jerez 24678
+    - Julián Divas 24687
+    - Marco Díaz 24229
+
+*/
+
 //Métodos de la clase nave para manejar movimiento y dibujo
 Nave::Nave(int startX, int startY) : x(startX), y(startY) {}
 
