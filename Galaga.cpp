@@ -701,9 +701,13 @@ void EnemySystem::createEnemies(int num)
     pthread_mutex_lock(&systemMutex);
     if (num > 15)
         num = 15;
+    int minX = 2;
+    int maxX = 77;
+    int spacing = (maxX - minX) / (num > 1 ? num - 1 : 1);
     for (int i = 0; i < num; i++)
     {
-        enemigos.emplace_back(i * 8 + 10, 3 + (i % 3));
+        int x = minX + i * spacing;
+        enemigos.emplace_back(x, 3 + (i % 3));
         threadActive.push_back(true);
         threads.push_back(0);
         direccionX.push_back(1);
