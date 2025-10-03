@@ -37,14 +37,14 @@ Este proyecto es una implementación en **C++** de un menú interactivo inspirad
 ## 📦 Instalación de Dependencias 
 
 ```bash
-sudo apt-get install libncurses5-dev libncursesw5-dev
+sudo apt-get install libncurses5-dev libncursesw5-dev mpg123
 ```
 
 ## ▶️ Cómo compilar y ejecutar
 
 ```bash
 # Compilar
-g++ Galaga.cpp Pantalla.cpp Nave.cpp Enemigo.cpp -o Galaga.exe -lncurses
+g++ Galaga.cpp Pantalla.cpp Nave.cpp Enemigo.cpp Boss.cpp -o Galaga -lncurses -lpthread
 
 # Ejecutar
 ./Galaga.exe
@@ -73,5 +73,4 @@ Pantalla de inicio:
  - Marcelo Detlefsen - 24554
  - Julián Divas - 24687
  - Marco Díaz - 24229
-
  - Alejandro Jeréz - 24678
