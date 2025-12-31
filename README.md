@@ -1,76 +1,127 @@
-# 🎮 Proyecto GALAGA (Versión Consola en C++)
+## GALAGA – Concurrent Console Game in C++
 
-Este proyecto es una implementación en **C++** de un menú interactivo inspirado en el clásico juego **Galaga**, utilizando la terminal para mostrar gráficos ASCII y colores ANSI.
+A **console-based game implemented in C++**, inspired by the classic *Galaga*, featuring real-time gameplay, enemy movement, collision detection, and coordinated boss behavior. The game uses **ncurses** for terminal rendering and **pthreads** for concurrency and synchronization.
 
-## ✨ Características
+---
 
-- 🎨 **Pantallas decorativas** con marcos y colores.
-- 🚀 **Pantalla de inicio (Splash Screen)** con arte ASCII del logo de GALAGA.
-- 🎮 **Controles representados con iconos ASCII** (mover izquierda, derecha, disparar).
-- ⭐ **Objetivo del juego** explicado en pantalla.
-- 📋 **Menú principal**:
-  - Iniciar partida (simulador)
-  - Ver puntajes
-  - Salir
-- 🕹️ **Simulador de juego**:
-  - S: Sumar 100 puntos (simula eliminar enemigo)
-  - M: Morir y terminar partida
-  - Q: Salir sin guardar puntaje
-- 🏆 **Sistema de puntajes**:
-  - Registro automático de nombre al terminar
-  - Tabla ordenada de mayor a menor puntaje
-  - Sin persistencia (se reinicia al cerrar programa)
+##  Project Overview
 
-## 📂 Estructura del código
+This project implements a functional **console game engine** running entirely in the terminal. It includes a real-time game loop, player input handling, enemy AI, collision detection, and a multi-threaded boss system with coordinated attacks.
 
-- **Galaga.cpp**: Archivo principal con toda la lógica del juego
-- **Pantalla.h/cpp**: Clase para manejo de pantalla (requiere ncurses)
-- **Nave.h/cpp**: Clase para la nave del jugador
-- *Funciones de consola*: manejo de cursor, colores y entrada de teclado
-- *Sistema de puntajes*: estructura y funciones para guardar/mostrar scores
+The goal of the project is to explore **low-level game logic**, **concurrent programming**, and **state management** using C++ in a terminal-based environment.
 
-## 🛠️ Requisitos
+---
 
-- Sistema operativo **Linux / macOS** (usa `termios` y `unistd`).
-- Compilador de C++ compatible con **C++11 o superior** (ej: `g++`).
+## Key Technical Concepts
 
-## 📦 Instalación de Dependencias 
+- Real-time game loop
+- Multi-threaded enemy and boss behavior
+- Synchronization using mutexes and condition variables
+- Collision detection
+- State management (player, enemies, boss, shots)
+- Terminal-based rendering using ncurses
 
-```bash
-sudo apt-get install libncurses5-dev libncursesw5-dev mpg123
+---
+
+##  Features
+
+- Interactive terminal UI with ASCII graphics and ANSI colors
+- Splash screen with ASCII art
+- Player-controlled ship with movement and actions
+- Real enemy movement and collision logic
+- Boss system with:
+  - Health bar
+  - Escort enemies
+  - Coordinated attack patterns
+  - Independent threads for behavior execution
+- Shooting mechanics for player, enemies, and boss
+- Score system with ranking
+- Score persistence using CSV files
+
+---
+
+## Project Structure
+```
+Galaga.cpp # Main game loop and core logic
+Pantalla.h / .cpp # Terminal rendering abstraction (ncurses)
+Nave.h / .cpp # Player ship logic
+Enemigo.h / .cpp # Enemy behavior and movement
+Boss.h / .cpp # Boss logic, escorts, and coordinated attacks
 ```
 
-## ▶️ Cómo compilar y ejecutar
+
+The codebase is modular, with clear separation of responsibilities between rendering, input, game entities, and concurrency control.
+
+---
+
+## 🛠 Technologies Used
+
+- C++ (C++11 or higher)
+- ncurses (terminal graphics)
+- pthreads (multithreading and synchronization)
+- Linux / macOS system libraries (`termios`, `unistd`)
+
+---
+
+## ⚙️ Requirements
+
+- Linux or macOS
+- C++ compiler supporting C++11+
+- ncurses development libraries
+- pthread support
+
+---
+
+## 📦 Dependency Installation (Linux)
 
 ```bash
-# Compilar
-g++ Galaga.cpp Pantalla.cpp Nave.cpp Enemigo.cpp Boss.cpp -o Galaga -lncurses -lpthread
-
-# Ejecutar
-./Galaga.exe
+    sudo apt-get install libncurses5-dev libncursesw5-dev mpg123
+    ▶️ Build and Run
+    bash
+    Copiar código
+    # Compile
+    g++ Galaga.cpp Pantalla.cpp Nave.cpp Enemigo.cpp Boss.cpp -o Galaga -lncurses -lpthread
 ```
+# Run
+./Galaga
+Gameplay Overview
 
-## 📸 Vista Previa (ASCII Art)
+Player controls the ship using keyboard input
 
-Pantalla de inicio:
+Enemies move dynamically and interact with the player
+
+Collisions are detected between shots, enemies, and the player
+
+Boss enemies execute coordinated attacks using multiple threads
+
+Scores are recorded and ranked during gameplay
+
+### Preview (ASCII Art)
 ```bash
-                     ██████   █████  ██      █████   ██████   █████ 
-                    ██       ██   ██ ██     ██   ██ ██       ██   ██
-                    ██   ███ ███████ ██     ███████ ██   ███ ███████
-                    ██    ██ ██   ██ ██     ██   ██ ██    ██ ██   ██
-                     ██████  ██   ██ ██████ ██   ██  ██████  ██   ██
-
+ ██████   █████  ██      █████   ██████   █████
+██       ██   ██ ██     ██   ██ ██       ██   ██
+██   ███ ███████ ██     ███████ ██   ███ ███████
+██    ██ ██   ██ ██     ██   ██ ██    ██ ██   ██
+ ██████  ██   ██ ██████ ██   ██  ██████  ██   ██
 ```
 
-## 🚧 Próximos pasos
+### Future Improvements
+Additional enemy movement patterns
 
- - Implementar lógica real de juego con enemigos que se muevan
- - Añadir niveles de dificultad
- - Implementar disparos y colisiones reale
+Difficulty levels
 
-## 👨‍💻 Autores
+Enhanced collision handling and effects
 
- - Marcelo Detlefsen - 24554
- - Julián Divas - 24687
- - Marco Díaz - 24229
- - Alejandro Jeréz - 24678
+Expanded boss behaviors and attack strategies
+
+Improved persistence and statistics tracking
+
+### Authors
+Marcelo Detlefsen
+
+Julián Divas
+
+Marco Díaz
+- Thread logic to enemies move in random ways and with 
+
+Alejandro Jeréz
