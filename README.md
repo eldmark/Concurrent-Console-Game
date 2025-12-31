@@ -54,7 +54,7 @@ The codebase is modular, with clear separation of responsibilities between rende
 
 ---
 
-## 🛠 Technologies Used
+##  Technologies Used
 
 - C++ (C++11 or higher)
 - ncurses (terminal graphics)
@@ -63,7 +63,7 @@ The codebase is modular, with clear separation of responsibilities between rende
 
 ---
 
-## ⚙️ Requirements
+##  Requirements
 
 - Linux or macOS
 - C++ compiler supporting C++11+
@@ -72,19 +72,20 @@ The codebase is modular, with clear separation of responsibilities between rende
 
 ---
 
-## 📦 Dependency Installation (Linux)
+### Dependency Installation (Linux)
 
 ```bash
     sudo apt-get install libncurses5-dev libncursesw5-dev mpg123
 ```
-### Build and Run
+## Build and Run
   ```bash
 
     g++ Galaga.cpp Pantalla.cpp Nave.cpp Enemigo.cpp Boss.cpp -o Galaga -lncurses -lpthread
   ```
-# Run
+## Run
 ./Galaga
-Gameplay Overview
+
+### Gameplay Overview
 
 Player controls the ship using keyboard input
 
@@ -122,7 +123,10 @@ Marcelo Detlefsen
 Julián Divas
 
 Marco Díaz
-- Thread logic to enemies move in random ways and with 
+- Thread logic to enemies move
+- Sincronizing movement of the enemies
+- Programing the movement of the main starship
 
 Alejandro Jeréz
+
 
