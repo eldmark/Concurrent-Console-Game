@@ -76,12 +76,12 @@ The codebase is modular, with clear separation of responsibilities between rende
 
 ```bash
     sudo apt-get install libncurses5-dev libncursesw5-dev mpg123
-    ▶️ Build and Run
-    bash
-    Copiar código
-    # Compile
-    g++ Galaga.cpp Pantalla.cpp Nave.cpp Enemigo.cpp Boss.cpp -o Galaga -lncurses -lpthread
 ```
+### Build and Run
+  ```bash
+
+    g++ Galaga.cpp Pantalla.cpp Nave.cpp Enemigo.cpp Boss.cpp -o Galaga -lncurses -lpthread
+  ```
 # Run
 ./Galaga
 Gameplay Overview
@@ -125,3 +125,4 @@ Marco Díaz
 - Thread logic to enemies move in random ways and with 
 
 Alejandro Jeréz
+
